@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>ContaBot — Estudio Contable Aristizábal & Asociados</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"/>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header class="header">
+  <div class="header-left">
+    <div class="logo">
+      <span class="logo-icon">CA</span>
+      <div>
+        <div class="logo-title">Estudio Contable Aristizábal & Asociados</div>
+        <div class="logo-sub">T.P. 124567-T · Federico Aristizábal Gómez · Bogotá D.C.</div>
+      </div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="periodo-badge">Ene – Jun 2026</span>
+    <span class="live-badge"><span class="live-dot"></span>DEMO EN VIVO</span>
+    <a href="/api/logout" class="logout-btn">Cerrar sesión</a>
+  </div>
+</header>
+
+<!-- ── NAV ── -->
+<nav class="nav">
+  <button class="nav-btn active"  data-section="workflow"  onclick="navTo('workflow',this)">Como Funciona</button>
+  <button class="nav-btn"         data-section="inicio"    onclick="navTo('inicio',this)">Ver Demo en Vivo</button>
+  <button class="nav-btn"         data-section="alertas"   onclick="navTo('alertas',this)">Alertas Globales</button>
+  <button class="nav-btn"         data-section="factura-manual" onclick="navTo('factura-manual',this)">Ingresar Factura</button>
+  <button class="nav-btn"         data-section="leer-imagen"    onclick="navTo('leer-imagen',this)">Leer Imagen</button>
+  <button class="nav-btn"         data-section="declaraciones"  onclick="navTo('declaraciones',this)">Declaraciones</button>
+  <button class="nav-btn"         data-section="empresa"   onclick="navTo('empresa',this)" id="nav-empresa" style="display:none">
+    <span id="nav-empresa-nombre">Empresa</span>
+  </button>
+</nav>
+
+<!-- ════════════════════════════════════
+     VISTA: MIS CLIENTES (inicio)
+═══════════════════════════════════════ -->
+<section id="section-inicio" class="section">
+
+  <!-- KPIs consolidados -->
+  <div class="kpi-grid" id="kpi-consolidado"></div>
+
+  <!-- Tarjetas de empresas -->
+  <h3 class="section-subtitle">Empresas bajo gestión</h3>
+  <div class="empresas-grid" id="empresas-grid"></div>
+
+</section>
+
+<!-- ════════════════════════════════════
+     VISTA: ALERTAS GLOBALES
+═══════════════════════════════════════ -->
+<section id="section-alertas" class="section">
+  <div class="section-header">
+    <h2>Alertas de Cobro — Todas las Empresas <span class="badge red" id="badge-alertas-global">—</span></h2>
+    <button class="btn-demo" onclick="runEmailsGlobal()">▶ Generar todos los emails de cobro</button>
+  </div>
+  <div id="alertas-global-lista"></div>
+</section>
+
+<!-- ════════════════════════════════════
+     VISTA: DETALLE EMPRESA
+═══════════════════════════════════════ -->
+<section id="section-empresa" class="section">
+
+  <!-- Header empresa -->
+  <div class="empresa-detail-header" id="empresa-detail-header"></div>
+
+  <!-- Sub-tabs -->
+  <div class="subtabs" id="subtabs">
+    <button class="subtab active" onclick="subtabTo('ventas',this)">Facturas de Venta</button>
+    <button class="subtab"        onclick="subtabTo('gastos',this)">Facturas de Gastos</button>
+    <button class="subtab"        onclick="subtabTo('alertas-e',this)">Alertas de Cobro</button>
+    <button class="subtab"        onclick="subtabTo('retenciones-e',this)">Retenciones</button>
+    <button class="subtab"        onclick="subtabTo('flujo-caja',this)">Flujo de Caja</button>
+    <button class="subtab" onclick="subtabTo('conciliacion',this)">Conciliación Bancaria</button>
+    <button class="subtab pdf-btn" onclick="descargarInforme()">⬇ PDF</button>
+    <button class="subtab pdf-btn" onclick="descargarExcel()">⬇ Excel</button>
+  </div>
+
+  <!-- Ventas -->
+  <div id="subtab-ventas" class="subtab-content active">
+    <div class="section-header" style="margin-top:1rem">
+      <h3>Facturas de Venta <span class="badge" id="badge-ventas-e">—</span></h3>
+      <button class="btn-demo" onclick="runFlujoA()">▶ Simular procesamiento automático</button>
+    </div>
+    <div id="flujo-a-progress" class="progress-bar-container" style="display:none">
+      <div class="progress-label" id="flujo-a-label">Procesando...</div>
+      <div class="progress-bar"><div class="progress-fill" id="flujo-a-fill"></div></div>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th>Número</th><th>Fecha</th><th>Cliente</th><th>Ciudad</th>
+          <th>Subtotal</th><th>IVA</th><th>Retefuente</th><th>ReteIVA</th><th>ReteICA</th>
+          <th>Total</th><th>Neto a Cobrar</th><th>Estado</th><th></th>
+        </tr></thead>
+        <tbody id="tbody-ventas-e"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Gastos -->
+  <div id="subtab-gastos" class="subtab-content">
+    <div class="section-header" style="margin-top:1rem">
+      <h3>Facturas de Gastos <span class="badge" id="badge-gastos-e">—</span></h3>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th>Número</th><th>Fecha</th><th>Proveedor</th><th>Categoría</th>
+          <th>Subtotal</th><th>IVA</th><th>Retefuente</th><th>ReteIVA</th><th>ReteICA</th>
+          <th>Total</th><th>Neto a Pagar</th><th>Estado</th><th></th>
+        </tr></thead>
+        <tbody id="tbody-gastos-e"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Alertas empresa -->
+  <div id="subtab-alertas-e" class="subtab-content">
+    <div class="section-header" style="margin-top:1rem">
+      <h3>Alertas de Cobro <span class="badge red" id="badge-alertas-e">—</span></h3>
+      <button class="btn-demo" onclick="runEmailsEmpresa()">▶ Generar emails de cobro</button>
+    </div>
+    <div id="alertas-empresa-lista"></div>
+    <div id="email-preview-section" style="display:none;margin-top:1.5rem">
+      <h4 style="color:#94a3b8;margin-bottom:.75rem">Email generado automáticamente:</h4>
+      <div class="email-preview" id="email-preview-box"></div>
+    </div>
+  </div>
+
+  <!-- Retenciones empresa -->
+  <div id="subtab-retenciones-e" class="subtab-content">
+    <div class="section-header" style="margin-top:1rem">
+      <h3>Retenciones del período</h3>
+    </div>
+    <div id="retenciones-empresa-contenido"></div>
+  </div>
+
+  <!-- Conciliación bancaria -->
+  <div id="subtab-conciliacion" class="subtab-content">
+    <div class="section-header" style="margin-top:1rem">
+      <h3>Conciliación Bancaria</h3>
+      <p style="font-size:13px;color:#64748b">Sube el extracto bancario en CSV y ContaBot cruza automáticamente con tus facturas pendientes.</p>
+    </div>
+    <div id="conc-upload-area" class="li-upload-area" style="margin-bottom:1.5rem">
+      <div class="li-upload-icon">🏦</div>
+      <div class="li-upload-text">Arrastra el extracto bancario (.csv) aquí</div>
+      <div class="li-upload-sub">Bancolombia · Davivienda · Banco de Bogotá · BBVA · cualquier banco</div>
+      <label class="li-upload-btn">
+        Seleccionar archivo CSV
+        <input type="file" id="conc-file-input" accept=".csv,text/csv" style="display:none" onchange="procesarExtracto(this.files[0])">
+      </label>
+    </div>
+    <div id="conc-resultado" style="display:none">
+      <div id="conc-resumen" class="kpi-grid" style="margin-bottom:1.5rem"></div>
+      <div id="conc-matches-section">
+        <h4 style="color:#10b981;margin-bottom:.75rem">Transacciones identificadas</h4>
+        <div class="table-wrap"><table class="data-table" id="conc-matches-tabla">
+          <thead><tr><th>Extracto — Monto</th><th>Fecha</th><th>Descripción</th><th>Factura</th><th>Tercero</th><th>Neto Factura</th><th>Diferencia</th><th>Tipo</th></tr></thead>
+          <tbody id="conc-matches-tbody"></tbody>
+        </table></div>
+      </div>
+      <div id="conc-sinmatch-section" style="margin-top:1.5rem">
+        <h4 style="color:#f59e0b;margin-bottom:.75rem">Sin identificar</h4>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Monto</th><th>Fecha</th><th>Descripción</th></tr></thead>
+          <tbody id="conc-sinmatch-tbody"></tbody>
+        </table></div>
+      </div>
+      <button class="btn-demo" style="margin-top:1rem" onclick="concNueva()">↩ Cargar otro extracto</button>
+    </div>
+  </div>
+
+  <!-- Flujo de caja -->
+  <div id="subtab-flujo-caja" class="subtab-content">
+    <div class="section-header" style="margin-top:1rem">
+      <h3>Flujo de Caja Proyectado — próximas 8 semanas</h3>
+    </div>
+    <div id="flujo-caja-kpis" class="fc-kpis"></div>
+    <div class="fc-chart-wrap">
+      <canvas id="flujo-caja-chart" height="100"></canvas>
+    </div>
+    <div class="fc-leyenda">
+      <span class="fc-ley-item green">Ingresos esperados (cobros)</span>
+      <span class="fc-ley-item red">Egresos esperados (pagos)</span>
+      <span class="fc-ley-item blue">Flujo neto</span>
+    </div>
+    <div id="flujo-caja-tabla"></div>
+  </div>
+
+</section>
+
+<!-- ════════════════════════════════════
+     VISTA: DECLARACIONES DIAN
+═══════════════════════════════════════ -->
+<section id="section-declaraciones" class="section">
+  <div class="section-header">
+    <div>
+      <h2>Pre-liquidación de Retenciones <span class="badge yellow" id="badge-decl">—</span></h2>
+      <p style="font-size:13px;color:#64748b;margin-top:.3rem">Resumen de retenciones practicadas este período — listo para declarar.</p>
+    </div>
+    <div id="decl-fecha-limite" class="decl-alerta-global"></div>
+  </div>
+  <div id="decl-consolidado" class="decl-consolidado-card"></div>
+  <div id="decl-empresas-grid" class="decl-grid"></div>
+</section>
+
+<!-- ════════════════════════════════════
+     VISTA: COMO FUNCIONA (workflow)
+═══════════════════════════════════════ -->
+<section id="section-workflow" class="section active">
+
+  <div class="wf-hero">
+    <div class="wf-hero-tag">Automatizacion contable</div>
+    <h1 class="wf-hero-title">Del documento al balance,<br>sin tocar un numero.</h1>
+    <p class="wf-hero-sub">Asi trabaja ContaBot desde que llega una factura hasta que el contador tiene todo listo para declarar.</p>
+  </div>
+
+  <!-- PASO A PASO INTERACTIVO -->
+  <div class="wf-steps-container">
+
+    <!-- Paso 1 -->
+    <div class="wf-step" id="wf-1">
+      <div class="wf-step-num">01</div>
+      <div class="wf-step-body">
+        <div class="wf-step-icon">📥</div>
+        <div class="wf-step-content">
+          <h3>Llega la factura</h3>
+          <p>El proveedor emite una factura electronica DIAN. Llega al correo de la empresa como PDF + XML, o por WhatsApp, o queda en una carpeta compartida.</p>
+          <div class="wf-step-tags">
+            <span class="wf-tag">Email</span>
+            <span class="wf-tag">WhatsApp</span>
+            <span class="wf-tag">Google Drive</span>
+            <span class="wf-tag">Portal DIAN</span>
+          </div>
+          <div class="wf-comparison">
+            <div class="wf-antes"><b>HOY:</b> La asistente la recibe y la deja para digitar despues. A veces se pierde.</div>
+            <div class="wf-despues"><b>CON CONTABOT:</b> El sistema la detecta en segundos automaticamente.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wf-arrow">↓</div>
+
+    <!-- Paso 2 -->
+    <div class="wf-step" id="wf-2">
+      <div class="wf-step-num">02</div>
+      <div class="wf-step-body">
+        <div class="wf-step-icon">🔍</div>
+        <div class="wf-step-content">
+          <h3>Lee y extrae los datos</h3>
+          <p>ContaBot lee el XML de la factura electronica DIAN — que tiene todos los datos en estructura perfecta — y extrae automaticamente:</p>
+          <div class="wf-extract-grid">
+            <div class="wf-extract-item"><span class="wf-extract-label">NIT proveedor</span><span class="wf-extract-val">900.456.789-3</span></div>
+            <div class="wf-extract-item"><span class="wf-extract-label">CUFE</span><span class="wf-extract-val">a3f9bc...d821</span></div>
+            <div class="wf-extract-item"><span class="wf-extract-label">Fecha</span><span class="wf-extract-val">15/05/2026</span></div>
+            <div class="wf-extract-item"><span class="wf-extract-label">Subtotal</span><span class="wf-extract-val">$4.200.000</span></div>
+            <div class="wf-extract-item"><span class="wf-extract-label">IVA 19%</span><span class="wf-extract-val">$798.000</span></div>
+            <div class="wf-extract-item"><span class="wf-extract-label">Total</span><span class="wf-extract-val">$4.998.000</span></div>
+          </div>
+          <div class="wf-comparison">
+            <div class="wf-antes"><b>HOY:</b> La asistente digita cada valor a mano. 5-10 minutos por factura, con riesgo de error.</div>
+            <div class="wf-despues"><b>CON CONTABOT:</b> Extraccion instantanea, sin errores de digitacion.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wf-arrow">↓</div>
+
+    <!-- Paso 3 -->
+    <div class="wf-step" id="wf-3">
+      <div class="wf-step-num">03</div>
+      <div class="wf-step-body">
+        <div class="wf-step-icon">🧮</div>
+        <div class="wf-step-content">
+          <h3>Calcula las retenciones automaticamente</h3>
+          <p>Segun el tipo de proveedor, el monto y si es gran contribuyente, ContaBot aplica las retenciones correctas sin que nadie tenga que saberlas de memoria.</p>
+          <div class="wf-ret-demo">
+            <div class="wf-ret-row header"><span>Concepto</span><span>Tasa</span><span>Valor</span></div>
+            <div class="wf-ret-row"><span>Retefuente (servicios)</span><span class="wf-rate">4%</span><span class="wf-val red">($168.000)</span></div>
+            <div class="wf-ret-row"><span>ReteIVA (gran contrib.)</span><span class="wf-rate">15% del IVA</span><span class="wf-val red">($119.700)</span></div>
+            <div class="wf-ret-row"><span>ReteICA (Bogota)</span><span class="wf-rate">4.14‰</span><span class="wf-val red">($17.388)</span></div>
+            <div class="wf-ret-row total"><span><b>Valor neto a pagar</b></span><span></span><span class="wf-val green"><b>$4.692.912</b></span></div>
+          </div>
+          <div class="wf-comparison">
+            <div class="wf-antes"><b>HOY:</b> El contador corrige retenciones mal aplicadas por la asistente. Horas perdidas antes de cada declaracion.</div>
+            <div class="wf-despues"><b>CON CONTABOT:</b> Siempre correctas. El contador llega y ya estan bien.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wf-arrow">↓</div>
+
+    <!-- Paso 4 -->
+    <div class="wf-step" id="wf-4">
+      <div class="wf-step-num">04</div>
+      <div class="wf-step-body">
+        <div class="wf-step-icon">📊</div>
+        <div class="wf-step-content">
+          <h3>El contador ve todo listo</h3>
+          <p>En el dashboard del contador aparecen todas las facturas de todos sus clientes, organizadas, clasificadas y con los calculos correctos. Sin tener que preguntar "me manda las facturas del mes".</p>
+          <div class="wf-benefits-grid">
+            <div class="wf-benefit">
+              <div class="wf-benefit-icon">⚡</div>
+              <div class="wf-benefit-title">Tiempo real</div>
+              <div class="wf-benefit-desc">Las facturas entran al sistema en el momento en que llegan, no al final del mes.</div>
+            </div>
+            <div class="wf-benefit">
+              <div class="wf-benefit-icon">🎯</div>
+              <div class="wf-benefit-title">Sin errores</div>
+              <div class="wf-benefit-desc">Lo que el contador ve es lo que dice el XML de la DIAN. No hay riesgo de mala digitacion.</div>
+            </div>
+            <div class="wf-benefit">
+              <div class="wf-benefit-icon">🔔</div>
+              <div class="wf-benefit-title">Alertas automaticas</div>
+              <div class="wf-benefit-desc">El sistema avisa cuando una factura esta por vencer o cuando falta alguna del mes.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wf-arrow">↓</div>
+
+    <!-- Paso 5 -->
+    <div class="wf-step" id="wf-5">
+      <div class="wf-step-num">05</div>
+      <div class="wf-step-body">
+        <div class="wf-step-icon">📋</div>
+        <div class="wf-step-content">
+          <h3>Declaraciones pre-llenadas</h3>
+          <p>Con todos los datos correctos, el sistema puede pre-liquidar automaticamente las declaraciones del mes. El contador solo revisa los numeros y firma.</p>
+          <div class="wf-declarations">
+            <div class="wf-decl-card">
+              <div class="wf-decl-name">Retefuente</div>
+              <div class="wf-decl-period">Junio 2026</div>
+              <div class="wf-decl-status ready">Listo para revisar</div>
+            </div>
+            <div class="wf-decl-card">
+              <div class="wf-decl-name">IVA bimestral</div>
+              <div class="wf-decl-period">May – Jun 2026</div>
+              <div class="wf-decl-status ready">Listo para revisar</div>
+            </div>
+            <div class="wf-decl-card">
+              <div class="wf-decl-name">ICA</div>
+              <div class="wf-decl-period">Junio 2026</div>
+              <div class="wf-decl-status ready">Listo para revisar</div>
+            </div>
+          </div>
+          <div class="wf-comparison">
+            <div class="wf-antes"><b>HOY:</b> El contador reune facturas, verifica, corrige, calcula. 2-3 dias por cliente por mes.</div>
+            <div class="wf-despues"><b>CON CONTABOT:</b> Revisa y firma. 30 minutos por cliente por mes.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /wf-steps-container -->
+
+  <!-- RESUMEN IMPACTO -->
+  <div class="wf-impact">
+    <h2 class="wf-impact-title">El impacto en numeros reales</h2>
+    <div class="wf-impact-grid">
+      <div class="wf-impact-card">
+        <div class="wf-impact-num">-80%</div>
+        <div class="wf-impact-label">Tiempo en digitacion</div>
+        <div class="wf-impact-desc">Lo que la asistente hace en 2 horas, el sistema lo hace en segundos.</div>
+      </div>
+      <div class="wf-impact-card">
+        <div class="wf-impact-num">0</div>
+        <div class="wf-impact-label">Errores de retencion</div>
+        <div class="wf-impact-desc">Las tasas se aplican automaticamente segun el tipo de gasto y el proveedor.</div>
+      </div>
+      <div class="wf-impact-card">
+        <div class="wf-impact-num">+6</div>
+        <div class="wf-impact-label">Clientes que puede manejar</div>
+        <div class="wf-impact-desc">El mismo contador puede atender mas empresas sin contratar mas personal.</div>
+      </div>
+      <div class="wf-impact-card">
+        <div class="wf-impact-num">100%</div>
+        <div class="wf-impact-label">Facturas trazadas</div>
+        <div class="wf-impact-desc">Ninguna factura se pierde. Todo queda registrado desde que llega.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PREGUNTA DE CIERRE -->
+  <div class="wf-cierre">
+    <h3>La pregunta que le hacemos al contador:</h3>
+    <div class="wf-pregunta">"?Cuanto tiempo pasa usted o su equipo digitando facturas y corrigiendo retenciones cada mes?"</div>
+    <p class="wf-cierre-sub">Esa respuesta es exactamente el tiempo que ContaBot le devuelve. Multipliquelo por 12 meses y por el numero de clientes.</p>
+  </div>
+
+</section>
+
+<!-- ════════════════════════════════════
+     VISTA: INGRESAR FACTURA MANUAL
+═══════════════════════════════════════ -->
+<section id="section-factura-manual" class="section">
+
+  <div class="fm-header">
+    <div>
+      <h2>Ingresar Factura en Papel</h2>
+      <p class="fm-sub">Para facturas que llegan en papel o que no estan en el sistema electronico. ContaBot calcula las retenciones automaticamente.</p>
+    </div>
+  </div>
+
+  <div class="fm-layout">
+
+    <!-- Formulario -->
+    <div class="fm-form-card">
+      <div class="fm-form-title">Datos de la factura</div>
+
+      <form id="form-manual" onsubmit="submitFacturaManual(event)">
+
+        <!-- Empresa cliente -->
+        <div class="fm-group">
+          <label class="fm-label">Empresa cliente *</label>
+          <select class="fm-input" id="fm-empresa" required>
+            <option value="">Seleccione la empresa...</option>
+          </select>
+        </div>
+
+        <!-- Tipo -->
+        <div class="fm-row">
+          <div class="fm-group">
+            <label class="fm-label">Tipo de documento *</label>
+            <select class="fm-input" id="fm-tipo" required onchange="onTipoChange()">
+              <option value="gasto">Factura de Gasto (compra)</option>
+              <option value="venta">Factura de Venta</option>
+            </select>
+          </div>
+          <div class="fm-group">
+            <label class="fm-label">Fecha de la factura *</label>
+            <input class="fm-input" type="date" id="fm-fecha" required/>
+          </div>
+        </div>
+
+        <!-- Proveedor / Cliente -->
+        <div class="fm-group">
+          <label class="fm-label" id="fm-tercero-label">Proveedor (quien emite la factura) *</label>
+          <input class="fm-input" type="text" id="fm-tercero-nombre" placeholder="Ej: Papeleria Los Pinos S.A.S." required/>
+        </div>
+        <div class="fm-row">
+          <div class="fm-group">
+            <label class="fm-label">NIT del proveedor *</label>
+            <input class="fm-input" type="text" id="fm-tercero-nit" placeholder="900.123.456-7" required/>
+          </div>
+          <div class="fm-group">
+            <label class="fm-label">Numero de factura *</label>
+            <input class="fm-input" type="text" id="fm-numero" placeholder="FV-0001 o 001234" required/>
+          </div>
+        </div>
+
+        <!-- Descripcion -->
+        <div class="fm-group">
+          <label class="fm-label">Descripcion del concepto *</label>
+          <input class="fm-input" type="text" id="fm-descripcion" placeholder="Ej: Compra de papeleria e insumos de oficina" required/>
+        </div>
+
+        <!-- Categoria y montos -->
+        <div class="fm-row">
+          <div class="fm-group">
+            <label class="fm-label">Categoria del gasto</label>
+            <select class="fm-input" id="fm-categoria" onchange="recalcular()">
+              <option value="insumos">Insumos / Materiales</option>
+              <option value="servicios">Servicios generales</option>
+              <option value="honorarios">Honorarios profesionales</option>
+              <option value="arrendamiento">Arrendamiento</option>
+              <option value="transporte">Transporte</option>
+              <option value="telecomunicaciones">Telecomunicaciones</option>
+              <option value="publicidad">Publicidad y marketing</option>
+              <option value="seguros">Seguros</option>
+              <option value="tecnologia">Tecnologia / Software</option>
+              <option value="servicios_publicos">Servicios publicos</option>
+            </select>
+          </div>
+          <div class="fm-group">
+            <label class="fm-label">IVA aplicable</label>
+            <select class="fm-input" id="fm-iva-rate" onchange="recalcular()">
+              <option value="0.19">19% — General</option>
+              <option value="0.05">5% — Reducido</option>
+              <option value="0">0% — Excluido / Exento</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="fm-row">
+          <div class="fm-group">
+            <label class="fm-label">Subtotal (sin IVA) *</label>
+            <input class="fm-input fm-money" type="number" id="fm-subtotal" placeholder="0" min="0" required oninput="recalcular()"/>
+          </div>
+          <div class="fm-group">
+            <label class="fm-label">Gran contribuyente</label>
+            <select class="fm-input" id="fm-gran-contrib" onchange="recalcular()">
+              <option value="no">No</option>
+              <option value="si">Si (aplica ReteIVA)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Plazo pago -->
+        <div class="fm-row">
+          <div class="fm-group">
+            <label class="fm-label">Forma de pago</label>
+            <select class="fm-input" id="fm-forma-pago">
+              <option value="30">Credito 30 dias</option>
+              <option value="60">Credito 60 dias</option>
+              <option value="15">Credito 15 dias</option>
+              <option value="0">Contado</option>
+            </select>
+          </div>
+          <div class="fm-group">
+            <label class="fm-label">Ciudad (para ReteICA)</label>
+            <select class="fm-input" id="fm-ciudad" onchange="recalcular()">
+              <option value="bogota">Bogota D.C. (4.14‰)</option>
+              <option value="medellin">Medellin (4.14‰)</option>
+              <option value="cali">Cali (4.14‰)</option>
+              <option value="barranquilla">Barranquilla (4.14‰)</option>
+              <option value="otra">Otra ciudad</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="fm-submit" type="submit" id="fm-submit-btn">
+          Registrar factura
+        </button>
+
+      </form>
+    </div>
+
+    <!-- Panel de cálculo automático -->
+    <div class="fm-calc-card">
+      <div class="fm-form-title">Calculo automatico de retenciones</div>
+      <p class="fm-calc-hint">Los valores se actualizan mientras escribe el subtotal.</p>
+
+      <div class="fm-calc-rows" id="fm-calc-rows">
+        <div class="fm-calc-row">
+          <span class="fm-calc-label">Subtotal</span>
+          <span class="fm-calc-val" id="fc-subtotal">$0</span>
+        </div>
+        <div class="fm-calc-row iva">
+          <span class="fm-calc-label">IVA</span>
+          <span class="fm-calc-val" id="fc-iva">$0</span>
+        </div>
+        <div class="fm-calc-divider"></div>
+        <div class="fm-calc-row total-fact">
+          <span class="fm-calc-label"><b>Total factura</b></span>
+          <span class="fm-calc-val" id="fc-total">$0</span>
+        </div>
+        <div class="fm-calc-divider"></div>
+        <div class="fm-calc-row ret">
+          <span class="fm-calc-label">(-) Retefuente</span>
+          <span class="fm-calc-val red" id="fc-retefuente">$0</span>
+        </div>
+        <div class="fm-calc-row ret" id="fc-reteiva-row">
+          <span class="fm-calc-label">(-) ReteIVA 15%</span>
+          <span class="fm-calc-val red" id="fc-reteiva">$0</span>
+        </div>
+        <div class="fm-calc-row ret">
+          <span class="fm-calc-label">(-) ReteICA 4.14‰</span>
+          <span class="fm-calc-val red" id="fc-reteica">$0</span>
+        </div>
+        <div class="fm-calc-divider"></div>
+        <div class="fm-calc-row neto">
+          <span class="fm-calc-label"><b>Valor neto a pagar</b></span>
+          <span class="fm-calc-val green" id="fc-neto"><b>$0</b></span>
+        </div>
+      </div>
+
+      <div class="fm-ret-info" id="fm-ret-info">
+        <div class="fm-ret-info-title">Por que estas retenciones?</div>
+        <div id="fm-ret-explicacion" class="fm-ret-texto">Ingrese un subtotal para ver el calculo.</div>
+      </div>
+    </div>
+
+  </div><!-- /fm-layout -->
+
+  <!-- Confirmación -->
+  <div id="fm-confirmacion" style="display:none" class="fm-confirmacion">
+    <div class="fm-conf-icon">✓</div>
+    <div class="fm-conf-title">Factura registrada exitosamente</div>
+    <div class="fm-conf-sub" id="fm-conf-sub"></div>
+    <button class="fm-conf-btn" onclick="nuevaFactura()">Ingresar otra factura</button>
+  </div>
+
+</section>
+
+<!-- ════════════════════════════════════
+     VISTA: LEER IMAGEN DE FACTURA
+═══════════════════════════════════════ -->
+<section id="section-leer-imagen" class="section">
+
+  <div class="fm-header">
+    <div>
+      <h2>Leer Factura desde Imagen o PDF</h2>
+      <p class="fm-sub">Suba una foto o captura de pantalla de una factura. ContaBot intenta leer el <b>código QR de la DIAN</b> primero; si no encuentra QR, usa reconocimiento de texto (OCR).</p>
+    </div>
+  </div>
+
+  <!-- Zona de upload -->
+  <div class="li-upload-area" id="li-upload-area"
+       ondragover="liDragOver(event)" ondrop="liDrop(event)" ondragleave="liDragLeave(event)">
+    <div class="li-upload-icon">📷</div>
+    <div class="li-upload-title">Arrastre la imagen aquí</div>
+    <div class="li-upload-sub">o haga clic para seleccionar archivo</div>
+    <div class="li-upload-types">JPG · PNG · WEBP · BMP</div>
+    <input type="file" id="li-file-input" accept="image/*" style="display:none" onchange="liFileSelected(this)"/>
+    <button class="li-select-btn" onclick="document.getElementById('li-file-input').click()">Seleccionar imagen</button>
+  </div>
+
+  <!-- Estado / resultado -->
+  <div id="li-resultado" style="display:none">
+
+    <!-- Preview + estado -->
+    <div class="li-preview-row">
+      <img id="li-preview-img" class="li-preview-img" src="" alt="preview"/>
+      <div class="li-estado-card" id="li-estado-card">
+        <div class="li-estado-icon" id="li-estado-icon">⏳</div>
+        <div class="li-estado-titulo" id="li-estado-titulo">Procesando...</div>
+        <div class="li-estado-sub" id="li-estado-sub">Buscando código QR de la DIAN...</div>
+      </div>
+    </div>
+
+    <!-- Datos extraídos -->
+    <div id="li-datos-extraidos" style="display:none">
+      <h3 class="li-datos-titulo">Datos extraídos</h3>
+      <div class="li-datos-grid" id="li-datos-grid"></div>
+      <div id="li-raw-text" style="display:none">
+        <div class="li-raw-title">Texto reconocido (OCR):</div>
+        <pre class="li-raw-pre" id="li-raw-pre"></pre>
+      </div>
+    </div>
+
+    <!-- Botones de acción -->
+    <div class="li-acciones" id="li-acciones" style="display:none">
+      <button class="btn-demo" onclick="liNueva()">Procesar otra imagen</button>
+    </div>
+
+  </div>
+
+</section>
+
+<script src="demo.js"></script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>ContaBot — Acceso</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',sans-serif;background:#0f172a;color:#f1f5f9;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+
+    .bg-glow{position:fixed;top:-200px;left:50%;transform:translateX(-50%);width:800px;height:500px;background:radial-gradient(ellipse,rgba(59,130,246,.12) 0%,transparent 70%);pointer-events:none;}
+
+    .login-card{background:#1e293b;border:1px solid #334155;border-radius:20px;padding:2.5rem;width:100%;max-width:400px;position:relative;}
+
+    .login-logo{display:flex;align-items:center;gap:.85rem;margin-bottom:2rem;justify-content:center;}
+    .login-logo-icon{width:46px;height:46px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:white;flex-shrink:0;}
+    .login-logo-text{text-align:left;}
+    .login-logo-title{font-size:16px;font-weight:800;line-height:1.2;}
+    .login-logo-sub{font-size:11px;color:#64748b;}
+
+    .login-title{font-size:22px;font-weight:800;text-align:center;margin-bottom:.4rem;}
+    .login-sub{font-size:13px;color:#64748b;text-align:center;margin-bottom:2rem;}
+
+    .form-group{margin-bottom:1.1rem;}
+    .form-label{display:block;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.07em;margin-bottom:.45rem;}
+    .form-input{width:100%;background:#0f172a;border:1px solid #334155;border-radius:10px;padding:.75rem 1rem;font-size:14px;font-family:inherit;color:#f1f5f9;outline:none;transition:border-color .15s;}
+    .form-input:focus{border-color:#3b82f6;}
+    .form-input::placeholder{color:#475569;}
+
+    .login-btn{width:100%;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border:none;border-radius:10px;padding:.85rem;font-size:15px;font-weight:700;font-family:inherit;color:white;cursor:pointer;margin-top:.5rem;transition:opacity .15s,transform .15s;}
+    .login-btn:hover{opacity:.92;transform:translateY(-1px);}
+    .login-btn:active{transform:none;}
+
+    .login-error{display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:.65rem 1rem;font-size:13px;color:#ef4444;text-align:center;margin-top:.75rem;}
+
+    .login-badge{display:flex;align-items:center;gap:.5rem;justify-content:center;margin-top:1.75rem;padding-top:1.5rem;border-top:1px solid #1e293b;}
+    .login-badge-dot{width:7px;height:7px;background:#10b981;border-radius:50%;}
+    .login-badge-text{font-size:11px;color:#475569;}
+
+    .demo-hint{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:.65rem 1rem;font-size:12px;color:#64748b;text-align:center;margin-bottom:1.25rem;line-height:1.5;}
+    .demo-hint b{color:#93c5fd;}
+  </style>
+</head>
+<body>
+<div class="bg-glow"></div>
+
+<div class="login-card">
+  <div class="login-logo">
+    <div class="login-logo-icon">CA</div>
+    <div class="login-logo-text">
+      <div class="login-logo-title">ContaBot</div>
+      <div class="login-logo-sub">Estudio Contable Aristizábal & Asociados</div>
+    </div>
+  </div>
+
+  <h2 class="login-title">Bienvenido</h2>
+  <p class="login-sub">Ingrese sus credenciales para acceder al sistema</p>
+
+  <div class="demo-hint">Acceso demo: <b>contador</b> / <b>contabot2026</b></div>
+
+  <form onsubmit="doLogin(event)">
+    <div class="form-group">
+      <label class="form-label">Usuario</label>
+      <input class="form-input" type="text" id="usuario" placeholder="Su usuario" autocomplete="username"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Contraseña</label>
+      <input class="form-input" type="password" id="password" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <button class="login-btn" type="submit" id="login-btn">Ingresar al sistema</button>
+    <div class="login-error" id="login-error">Usuario o contraseña incorrectos</div>
+  </form>
+
+  <div class="login-badge">
+    <div class="login-badge-dot"></div>
+    <span class="login-badge-text">Conexión segura · Datos cifrados · Solo acceso autorizado</span>
+  </div>
+</div>
+
+<script>
+async function doLogin(e) {
+  e.preventDefault();
+  const u   = document.getElementById('usuario').value.trim();
+  const p   = document.getElementById('password').value.trim();
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('login-error');
+
+  btn.textContent = 'Verificando...';
+  btn.disabled = true;
+  err.style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({usuario: u, password: p})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = 'Acceso concedido ✓';
+      setTimeout(() => { window.location.href = '/'; }, 500);
+    } else {
+      err.textContent = data.error || 'Usuario o contraseña incorrectos';
+      err.style.display = 'block';
+      btn.textContent = 'Ingresar al sistema';
+      btn.disabled = false;
+    }
+  } catch {
+    err.textContent = 'Error de conexión. Intente de nuevo.';
+    err.style.display = 'block';
+    btn.textContent = 'Ingresar al sistema';
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
