@@ -38,6 +38,10 @@ def index():
         return redirect("/login")
     return send_from_directory(UI_DIR, "index.html")
 
+@app.route("/bienvenida")
+def bienvenida():
+    return send_from_directory(UI_DIR, "bienvenida.html")
+
 @app.route("/login")
 def login_page():
     if session.get("logged_in"):
