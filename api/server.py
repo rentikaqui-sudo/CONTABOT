@@ -1526,6 +1526,14 @@ def conciliacion_bancaria(eid):
 def get_calendario():
     from datetime import date as d
     empresas = sb.table("empresas_clientes").select("id,nit,razon_social,ciudad,regimen").execute().data
+
+    # Cargar obligaciones ya completadas
+    try:
+        comp_rows = sb.table("obligaciones_completadas").select("empresa_id,tipo,vencimiento").execute().data
+        completadas = {(c["empresa_id"], c["tipo"], c["vencimiento"]) for c in comp_rows}
+    except Exception:
+        completadas = set()
+
     resultado = []
     hoy = d.today()
     for e in empresas:
@@ -1534,8 +1542,9 @@ def get_calendario():
         for ob in obs:
             vto = d.fromisoformat(ob["vencimiento"])
             dias = (vto - hoy).days
-            if dias < -30:
-                estado = "vencida"
+            completada = (e["id"], ob["tipo"], ob["vencimiento"]) in completadas
+            if completada:
+                estado = "completada"
             elif dias < 0:
                 estado = "vencida"
             elif dias <= 7:
@@ -1545,19 +1554,54 @@ def get_calendario():
             else:
                 estado = "ok"
             resultado.append({
-                "empresa_id":    e["id"],
-                "empresa":       e["razon_social"],
-                "ciudad":        e.get("ciudad", ""),
-                "nit":           e.get("nit", ""),
-                "tipo":          ob["tipo"],
-                "periodo":       ob["periodo"],
-                "vencimiento":   ob["vencimiento"],
-                "frecuencia":    ob["frecuencia"],
+                "empresa_id":     e["id"],
+                "empresa":        e["razon_social"],
+                "ciudad":         e.get("ciudad", ""),
+                "nit":            e.get("nit", ""),
+                "tipo":           ob["tipo"],
+                "periodo":        ob["periodo"],
+                "vencimiento":    ob["vencimiento"],
+                "frecuencia":     ob["frecuencia"],
                 "dias_restantes": dias,
-                "estado":        estado,
+                "estado":         estado,
+                "completada":     completada,
             })
     resultado.sort(key=lambda x: x["vencimiento"])
     return jsonify({"ok": True, "obligaciones": resultado})
+
+
+@app.route("/api/obligacion/completar", methods=["POST"])
+@login_required
+def completar_obligacion():
+    body = request.get_json() or {}
+    empresa_id  = body.get("empresa_id")
+    tipo        = body.get("tipo")
+    vencimiento = body.get("vencimiento")
+    if not all([empresa_id, tipo, vencimiento]):
+        return jsonify({"ok": False, "error": "Faltan campos"}), 400
+    try:
+        sb.table("obligaciones_completadas").upsert({
+            "empresa_id": empresa_id,
+            "tipo":        tipo,
+            "vencimiento": vencimiento,
+        }, on_conflict="empresa_id,tipo,vencimiento").execute()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/obligacion/completar", methods=["DELETE"])
+@login_required
+def descompletar_obligacion():
+    body = request.get_json() or {}
+    empresa_id  = body.get("empresa_id")
+    tipo        = body.get("tipo")
+    vencimiento = body.get("vencimiento")
+    try:
+        sb.table("obligaciones_completadas").delete().eq("empresa_id", empresa_id).eq("tipo", tipo).eq("vencimiento", vencimiento).execute()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/calendario/notificar", methods=["POST"])
@@ -1934,34 +1978,36 @@ def _iniciar_scheduler():
 
 
 def _migrar_tablas():
-    """Crea tablas necesarias si no existen (usa SQL via Supabase RPC si está disponible)."""
-    try:
-        # Verificar si empresas_pendientes existe intentando hacer un select
-        sb.table("empresas_pendientes").select("id").limit(1).execute()
-    except Exception:
-        # La tabla no existe — intentar crearla via RPC (si existe la función)
+    """Crea tablas necesarias si no existen."""
+    tablas = [
+        ("empresas_pendientes",
+         "CREATE TABLE IF NOT EXISTS empresas_pendientes ("
+         "  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,"
+         "  nit TEXT, razon_social TEXT, ciudad TEXT,"
+         "  factura_data JSONB, fuente TEXT,"
+         "  created_at TIMESTAMPTZ DEFAULT NOW()"
+         ");"),
+        ("obligaciones_completadas",
+         "CREATE TABLE IF NOT EXISTS obligaciones_completadas ("
+         "  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,"
+         "  empresa_id INTEGER,"
+         "  tipo TEXT,"
+         "  vencimiento DATE,"
+         "  realizada_en DATE DEFAULT CURRENT_DATE,"
+         "  created_at TIMESTAMPTZ DEFAULT NOW(),"
+         "  UNIQUE(empresa_id, tipo, vencimiento)"
+         ");"),
+    ]
+    for nombre, sql in tablas:
         try:
-            sb.rpc("exec_sql", {"sql": (
-                "CREATE TABLE IF NOT EXISTS empresas_pendientes ("
-                "  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,"
-                "  nit TEXT,"
-                "  razon_social TEXT,"
-                "  ciudad TEXT,"
-                "  factura_data JSONB,"
-                "  fuente TEXT,"
-                "  created_at TIMESTAMPTZ DEFAULT NOW()"
-                ");"
-            )}).execute()
-            print("[migración] Tabla empresas_pendientes creada.")
-        except Exception as ex:
-            print(f"[migración] No se pudo crear empresas_pendientes automáticamente: {ex}")
-            print("[migración] Crea la tabla manualmente en Supabase SQL Editor:")
-            print("  CREATE TABLE IF NOT EXISTS empresas_pendientes (")
-            print("    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,")
-            print("    nit TEXT, razon_social TEXT, ciudad TEXT,")
-            print("    factura_data JSONB, fuente TEXT,")
-            print("    created_at TIMESTAMPTZ DEFAULT NOW()")
-            print("  );")
+            sb.table(nombre).select("id").limit(1).execute()
+        except Exception:
+            try:
+                sb.rpc("exec_sql", {"sql": sql}).execute()
+                print(f"[migración] Tabla {nombre} creada.")
+            except Exception as ex:
+                print(f"[migración] {nombre} no existe y no se pudo crear: {ex}")
+                print(f"[migración] Crea manualmente: {sql}")
 
 
 if __name__ == "__main__":

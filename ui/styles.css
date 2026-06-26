@@ -432,7 +432,8 @@ body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); 
 .cal-kpi.urgente .cal-kpi-num { color:var(--red); }
 .cal-kpi.proxima .cal-kpi-num { color:#f59e0b; }
 .cal-kpi.ok      .cal-kpi-num { color:var(--green); }
-.cal-kpi.vencida .cal-kpi-num { color:#9ca3af; }
+.cal-kpi.vencida    .cal-kpi-num { color:#9ca3af; }
+.cal-kpi.completada .cal-kpi-num { color:#10b981; }
 
 .cal-tabla { width:100%; border-collapse:collapse; font-size:13px; }
 .cal-tabla th { text-align:left; font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; padding:.6rem 1rem; border-bottom:2px solid var(--border); }

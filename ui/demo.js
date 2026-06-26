@@ -1075,18 +1075,22 @@ async function cargarCalendario() {
 }
 
 function renderCalendario() {
-  const filtroEmp    = document.getElementById('cal-filtro-empresa').value;
-  const filtroTipo   = document.getElementById('cal-filtro-tipo').value;
-  const filtroEstado = document.getElementById('cal-filtro-estado').value;
+  const filtroEmp        = document.getElementById('cal-filtro-empresa').value;
+  const filtroTipo       = document.getElementById('cal-filtro-tipo').value;
+  const filtroEstado     = document.getElementById('cal-filtro-estado').value;
+  const mostrarCompletadas = document.getElementById('cal-mostrar-completadas').checked;
 
   let obs = _calData;
   if (filtroEmp)    obs = obs.filter(o => String(o.empresa_id) === filtroEmp);
   if (filtroTipo)   obs = obs.filter(o => o.tipo === filtroTipo || o.tipo.startsWith(filtroTipo));
   if (filtroEstado) obs = obs.filter(o => o.estado === filtroEstado);
+  if (!mostrarCompletadas) obs = obs.filter(o => !o.completada);
 
-  // KPIs
+  // KPIs (solo pendientes, no completadas)
+  const pendientes = obs.filter(o => !o.completada);
   const conteos = { urgente: 0, proxima: 0, ok: 0, vencida: 0 };
-  obs.forEach(o => conteos[o.estado] = (conteos[o.estado] || 0) + 1);
+  pendientes.forEach(o => { if (conteos[o.estado] !== undefined) conteos[o.estado]++; });
+  const totalCompletadas = _calData.filter(o => o.completada).length;
   document.getElementById('cal-kpis').innerHTML = [
     ['urgente', 'Urgentes ≤7d',  conteos.urgente],
     ['proxima', 'Próximas ≤30d', conteos.proxima],
@@ -1096,25 +1100,35 @@ function renderCalendario() {
     <div class="cal-kpi ${cls}">
       <div class="cal-kpi-num">${n}</div>
       <div class="cal-kpi-label">${label}</div>
-    </div>`).join('');
+    </div>`).join('')
+  + (totalCompletadas ? `<div class="cal-kpi completada"><div class="cal-kpi-num">✓ ${totalCompletadas}</div><div class="cal-kpi-label">Realizadas</div></div>` : '');
 
   if (!obs.length) {
     document.getElementById('cal-lista').innerHTML = '<p style="color:var(--muted);padding:2rem 0">Sin obligaciones con estos filtros.</p>';
     return;
   }
 
-  const ETIQUETAS = { urgente: 'Urgente', proxima: 'Próxima', ok: 'A tiempo', vencida: 'Vencida' };
+  const ETIQUETAS = { urgente: 'Urgente', proxima: 'Próxima', ok: 'A tiempo', vencida: 'Vencida', completada: '✓ Realizada' };
 
   const filas = obs.map(o => {
     const dias = o.dias_restantes;
-    const diasLabel = dias < 0 ? `Vencida hace ${Math.abs(dias)}d` : dias === 0 ? 'Hoy' : `${dias}d`;
-    return `<tr>
+    const diasLabel = o.completada ? '—' : dias < 0 ? `Vencida hace ${Math.abs(dias)}d` : dias === 0 ? 'Hoy' : `${dias}d`;
+    const rowStyle  = o.completada ? 'opacity:.45;' : '';
+    const btnLabel  = o.completada ? '↩ Deshacer' : '✓ Marcar hecha';
+    const btnStyle  = o.completada
+      ? 'background:transparent;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:.25rem .6rem;border-radius:6px;cursor:pointer'
+      : 'background:#10b981;border:none;color:#fff;font-size:11px;padding:.25rem .6rem;border-radius:6px;cursor:pointer;font-weight:600';
+    const eid  = o.empresa_id;
+    const tipo = o.tipo.replace(/'/g, "\\'");
+    const vto  = o.vencimiento;
+    return `<tr style="${rowStyle}">
       <td><span class="cal-empresa-tag">${o.empresa.split(' ').slice(0,3).join(' ')}</span></td>
       <td><strong>${o.tipo}</strong></td>
       <td style="color:var(--muted)">${o.periodo}</td>
       <td>${o.vencimiento}</td>
       <td style="font-weight:600">${diasLabel}</td>
-      <td><span class="cal-badge ${o.estado}">${ETIQUETAS[o.estado]}</span></td>
+      <td><span class="cal-badge ${o.estado}">${ETIQUETAS[o.estado] || o.estado}</span></td>
+      <td><button style="${btnStyle}" onclick="marcarObligacion(${eid},'${tipo}','${vto}',${!o.completada})">${btnLabel}</button></td>
     </tr>`;
   }).join('');
 
@@ -1122,10 +1136,20 @@ function renderCalendario() {
     <table class="cal-tabla">
       <thead><tr>
         <th>Empresa</th><th>Obligación</th><th>Período</th>
-        <th>Vencimiento</th><th>Días</th><th>Estado</th>
+        <th>Vencimiento</th><th>Días</th><th>Estado</th><th></th>
       </tr></thead>
       <tbody>${filas}</tbody>
     </table>`;
+}
+
+async function marcarObligacion(empresaId, tipo, vencimiento, completar) {
+  const method = completar ? 'POST' : 'DELETE';
+  await fetch('/api/obligacion/completar', {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empresa_id: empresaId, tipo, vencimiento }),
+  });
+  await cargarCalendario();
 }
 
 async function notificarObligaciones() {

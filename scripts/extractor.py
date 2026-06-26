@@ -77,6 +77,17 @@ def extraer_xml(path: str) -> dict | None:
             numero_factura = val
             break
 
+    # Para personas naturales el XML DIAN usa cbc:ID (CC/schemeID=13) en vez de cbc:CompanyID
+    receptor_nit = (_xt(root, ".//cac:AccountingCustomerParty//cbc:CompanyID") or
+                    _xt(root, ".//cac:AccountingCustomerParty//cbc:ID"))
+    # Nombre: RegistrationName (empresa) o FirstName+FamilyName (persona natural)
+    rec_regname = _xt(root, ".//cac:AccountingCustomerParty//cbc:RegistrationName")
+    rec_first   = _xt(root, ".//cac:AccountingCustomerParty//cbc:FirstName")
+    rec_last    = (_xt(root, ".//cac:AccountingCustomerParty//cbc:FamilyName") or
+                   _xt(root, ".//cac:AccountingCustomerParty//cbc:LastName"))
+    receptor_nombre = (rec_regname or
+                       " ".join(filter(None, [rec_first, rec_last])) or None)
+
     datos = {
         "cufe":              _xt(root, ".//cbc:UUID"),
         "numero":            numero_factura,
@@ -84,8 +95,8 @@ def extraer_xml(path: str) -> dict | None:
         "proveedor_nit":     _xt(root, ".//cac:AccountingSupplierParty//cbc:CompanyID"),
         "proveedor_nombre":  _xt(root, ".//cac:AccountingSupplierParty//cbc:RegistrationName"),
         "proveedor_ciudad":  _xt(root, ".//cac:AccountingSupplierParty//cbc:CityName"),
-        "receptor_nit":      _xt(root, ".//cac:AccountingCustomerParty//cbc:CompanyID"),
-        "receptor_nombre":   _xt(root, ".//cac:AccountingCustomerParty//cbc:RegistrationName"),
+        "receptor_nit":      receptor_nit,
+        "receptor_nombre":   receptor_nombre,
         "subtotal":          to_float(_xt(root, ".//cbc:LineExtensionAmount")),
         "iva":               to_float(_xt(root, ".//cbc:TaxAmount")),
         "total_factura":     to_float(_xt(root, ".//cbc:PayableAmount")),
@@ -131,6 +142,18 @@ def extraer_pdf(path: str) -> dict | None:
     m = re.search(r"NIT[:\s]*([\d\.]{6,}(?:\-\d)?)", text, re.IGNORECASE)
     if m:
         datos["proveedor_nit"] = m.group(1)
+
+    # Receptor: persona natural con CC (cédula). Buscar después del primer NIT (que es del proveedor)
+    proveedor_pos = text.upper().find("NIT")
+    buscar_desde  = proveedor_pos + 10 if proveedor_pos >= 0 else 0
+    m_cc = re.search(r"\bC\.?C\.?\b[:\s]*([\d]{6,12})", text[buscar_desde:], re.IGNORECASE)
+    if m_cc:
+        datos["receptor_nit"] = m_cc.group(1)
+
+    # Nombre del receptor (línea con "Nombre:" en sección CLIENTE)
+    m_nom = re.search(r"(?:Nombre|Cliente)[:\s]+([A-Za-záéíóúñÁÉÍÓÚÑ][A-Za-záéíóúñÁÉÍÓÚÑ\s]{3,50})", text, re.IGNORECASE)
+    if m_nom:
+        datos["receptor_nombre"] = m_nom.group(1).strip()
 
     m = re.search(r"(?:TOTAL\s+(?:A\s+PAGAR|FACTURA)|Valor\s+total)[:\s\$]*([\d\.,]+)", text, re.IGNORECASE)
     if m:

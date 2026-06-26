@@ -71,8 +71,8 @@ def notificar_empresa_desconocida(datos: dict, fuente: str = "gmail", pendiente_
     if not token or not chat_id:
         return
 
-    nit    = datos.get("receptor_nit", "desconocido")
-    nombre = datos.get("receptor_nombre", "")
+    nit    = datos.get("receptor_nit") or "desconocido"
+    nombre = datos.get("receptor_nombre") or ""
     prov   = datos.get("proveedor_nombre", "")
     num    = datos.get("numero", "—")
     fuente_label = {"gmail": "📧 correo", "upload": "⬆️ subida"}.get(fuente, fuente)
