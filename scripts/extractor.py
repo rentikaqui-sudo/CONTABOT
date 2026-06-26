@@ -64,6 +64,18 @@ def _strip_ns(root):
     return root
 
 
+def _limpiar_nombre(nombre: str) -> str | None:
+    """Elimina palabras de label/encabezado que no deben estar en un nombre de empresa."""
+    if not nombre:
+        return None
+    # Quitar sufijos que no son parte del nombre (NIT, CC, Dirección, etc.)
+    nombre = re.sub(r'\s+(NIT|C\.?C\.?|RUT|Direcci[oó]n|Calle|Carrera|Cr\.?|Cl\.?|Av\.?|Tel[eé]fono|Tel\.?)\b.*',
+                    '', nombre, flags=re.IGNORECASE).strip()
+    # Quitar prefijos de label
+    nombre = re.sub(r'^(Nombre|Cliente|Se[ñn]ores?)[:\s]+', '', nombre, flags=re.IGNORECASE).strip()
+    return nombre if len(nombre) > 2 else None
+
+
 def _find_text(root, *tags):
     """Busca el primer elemento que coincida con cualquiera de los tags locales."""
     for tag in tags:
@@ -91,15 +103,44 @@ def _find_max(root, tag):
     return max(vals, default=0)
 
 
+def _extraer_invoice_embebido(outer_root) -> "ET.Element | None":
+    """
+    Si el root es un AttachedDocument DIAN, extrae el Invoice XML embebido
+    en el elemento <Description>. Retorna el root del Invoice interno o None.
+    """
+    for el in outer_root.iter():
+        tag = el.tag.split("}")[1] if "}" in el.tag else el.tag
+        if tag == "Description" and el.text and "<Invoice" in el.text:
+            try:
+                inner = ET.fromstring(el.text.strip())
+                return _strip_ns(inner)
+            except Exception as e:
+                print(f"Error parseando Invoice embebido: {e}")
+    return None
+
+
 def extraer_xml(path: str) -> dict | None:
     try:
-        root = _strip_ns(ET.parse(path).getroot())
+        raw_root = ET.parse(path).getroot()
     except Exception as e:
         print(f"Error XML: {e}")
         return None
 
+    # Detectar AttachedDocument DIAN y extraer Invoice interno
+    outer_tag = raw_root.tag.split("}")[1] if "}" in raw_root.tag else raw_root.tag
+    if outer_tag == "AttachedDocument":
+        invoice_root = _extraer_invoice_embebido(raw_root)
+        outer_root   = _strip_ns(raw_root)   # sobre: tiene CompanyID de proveedor/receptor
+    else:
+        invoice_root = None
+        outer_root   = None
+
+    root = invoice_root if invoice_root is not None else _strip_ns(raw_root)
+
     # Verificar que sea un documento DIAN (tiene UUID = CUFE)
     cufe_el = root.find(".//UUID")
+    if cufe_el is None and outer_root is not None:
+        cufe_el = outer_root.find(".//UUID")
     if cufe_el is None:
         return None
 
@@ -107,20 +148,32 @@ def extraer_xml(path: str) -> dict | None:
         try: return float(v) if v else 0
         except: return 0
 
-    # Número de factura
+    # ── Número de factura ───────────────────────────────────────────────────────
+    # En AttachedDocument el número real está en ParentDocumentID del sobre
     numero_factura = None
-    for el in root.findall(".//ID"):
-        val = (el.text or "").strip()
-        if val and PATRON_NUM_FACTURA.match(val):
-            numero_factura = val
-            break
+    if outer_root is not None:
+        pid = outer_root.find(".//ParentDocumentID")
+        if pid is not None and pid.text:
+            numero_factura = pid.text.strip()
+    if not numero_factura:
+        for el in root.findall(".//ID"):
+            val = (el.text or "").strip()
+            if val and PATRON_NUM_FACTURA.match(val):
+                numero_factura = val
+                break
 
-    # Proveedor (emisor)
+    # ── Proveedor (emisor) ──────────────────────────────────────────────────────
     prov_nit    = _find_under(root, "AccountingSupplierParty", "CompanyID", "ID")
-    prov_nombre = _find_under(root, "AccountingSupplierParty", "RegistrationName", "Name")
+    prov_nombre = _limpiar_nombre(_find_under(root, "AccountingSupplierParty", "RegistrationName", "Name"))
     prov_ciudad = _find_under(root, "AccountingSupplierParty", "CityName")
 
-    # Receptor (cliente) — empresa (CompanyID) o persona natural (ID con CC)
+    # Fallback: NITs del sobre AttachedDocument (primer CompanyID = proveedor)
+    if not prov_nit and outer_root is not None:
+        all_company_ids = [e.text.strip() for e in outer_root.findall(".//CompanyID") if e.text]
+        if all_company_ids:
+            prov_nit = all_company_ids[0]
+
+    # ── Receptor (cliente) ──────────────────────────────────────────────────────
     rec_nit    = _find_under(root, "AccountingCustomerParty", "CompanyID", "ID")
     rec_nombre = _find_under(root, "AccountingCustomerParty", "RegistrationName", "Name")
     if not rec_nombre:
@@ -128,13 +181,28 @@ def extraer_xml(path: str) -> dict | None:
         last  = _find_under(root, "AccountingCustomerParty", "FamilyName") or \
                 _find_under(root, "AccountingCustomerParty", "LastName")
         rec_nombre = " ".join(filter(None, [first, last])) or None
+    rec_nombre = _limpiar_nombre(rec_nombre)
 
-    # Montos — máximo de cada campo (el total del documento > líneas de detalle)
-    subtotal = _find_max(root, "LineExtensionAmount")
-    total    = _find_max(root, "PayableAmount")
-    # IVA: buscar en TaxTotal primero
-    iva_el = root.find(".//TaxTotal//TaxAmount")
-    iva = to_float(iva_el.text if iva_el is not None else None)
+    # Fallback: segundo CompanyID del sobre AttachedDocument = receptor
+    if not rec_nit and outer_root is not None:
+        all_company_ids = [e.text.strip() for e in outer_root.findall(".//CompanyID") if e.text]
+        if len(all_company_ids) >= 2:
+            rec_nit = all_company_ids[1]
+
+    # ── Montos desde LegalMonetaryTotal (totales del documento, no líneas) ──────
+    lmt = root.find(".//LegalMonetaryTotal")
+    if lmt is not None:
+        def lmt_val(tag):
+            el = lmt.find(f".//{tag}")
+            return to_float(el.text if el is not None else None)
+        subtotal = lmt_val("LineExtensionAmount")
+        total    = lmt_val("PayableAmount") or lmt_val("TaxInclusiveAmount")
+    else:
+        subtotal = _find_max(root, "LineExtensionAmount")
+        total    = _find_max(root, "PayableAmount")
+
+    # IVA: máximo TaxAmount (el valor total del impuesto, más alto que subtotales por línea)
+    iva = _find_max(root, "TaxAmount")
 
     datos = {
         "cufe":              cufe_el.text.strip(),
@@ -209,7 +277,7 @@ def extraer_pdf(path: str) -> dict | None:
     # Nombre del receptor — buscar "Señores:", "Cliente:", no encabezados de tabla
     m_nom = re.search(r"(?:Se[ñn]ore?s|Cliente)[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]{4,60})(?:\n|$)", text, re.IGNORECASE)
     if m_nom:
-        datos["receptor_nombre"] = m_nom.group(1).strip()
+        datos["receptor_nombre"] = _limpiar_nombre(m_nom.group(1).strip())
 
     # Total: acepta "TOTAL A PAGAR", "TOTAL A PAGAR CLIENTE", "TOTAL OPERACIÓN", "TOTAL FACTURA"
     m = re.search(r"TOTAL\s+(?:A\s+PAGAR(?:\s+\w+)?|FACTURA|OPERACI[OÓ]N\s+COP)[^\d\n]*([\d\.,]{4,})", text, re.IGNORECASE)
@@ -234,14 +302,28 @@ def extraer_pdf(path: str) -> dict | None:
 COLORES = ["#6366f1","#10b981","#f59e0b","#ef4444","#3b82f6","#8b5cf6","#ec4899","#14b8a6"]
 ICONOS  = ["🏢","🏭","🛒","🏗️","💊","🚛","🍽️","📦","⚙️","🏬"]
 
+def _nit_base(nit: str) -> str:
+    """Extrae dígitos del NIT ignorando el dígito verificador (parte después del guion)."""
+    if not nit:
+        return ""
+    # Si tiene guion, descartar lo que va después del último guion (dígito verificador)
+    if "-" in nit:
+        nit = nit.rsplit("-", 1)[0]
+    return re.sub(r"[^\d]", "", nit)
+
+
 def detectar_empresa(receptor_nit: str, sb) -> dict | None:
     """Busca en Supabase la empresa cuyo NIT coincide con el receptor."""
     if not receptor_nit:
         return None
-    nit_limpio = re.sub(r"[^\d]", "", receptor_nit)
+    nit_factura = _nit_base(receptor_nit)
+    if not nit_factura:
+        return None
     empresas = sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
     for e in empresas:
-        if re.sub(r"[^\d]", "", e.get("nit", "")) == nit_limpio:
+        nit_empresa = _nit_base(e.get("nit", ""))
+        # Coincide si son iguales o uno empieza con el otro (variantes con/sin verificador)
+        if nit_factura == nit_empresa or nit_factura.startswith(nit_empresa) or nit_empresa.startswith(nit_factura):
             return e
     return None
 

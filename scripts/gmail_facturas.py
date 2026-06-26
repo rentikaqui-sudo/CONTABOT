@@ -297,7 +297,8 @@ def procesar_mensaje(service, msg, empresa_id):
         if not empresa:
             print(f"    ! Empresa no encontrada (NIT {datos.get('receptor_nit','?')}) — avisando por Telegram con botones")
             pendiente_id = guardar_empresa_pendiente(datos, fuente="gmail", sb=sb)
-            notificar_empresa_desconocida(datos, fuente="gmail", pendiente_id=pendiente_id)
+            empresas_all = sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
+            notificar_empresa_desconocida(datos, fuente="gmail", pendiente_id=pendiente_id, empresas=empresas_all)
             return "ignoradas"
 
         eid_real = empresa["id"]

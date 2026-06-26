@@ -61,10 +61,10 @@ def notificar_factura(datos: dict, empresa_nombre: str, tipo: str = "compra", fu
     _send(token, chat_id, texto)
 
 
-def notificar_empresa_desconocida(datos: dict, fuente: str = "gmail", pendiente_id: str = None):
+def notificar_empresa_desconocida(datos: dict, fuente: str = "gmail", pendiente_id: str = None, empresas: list = None):
     """
-    Avisa cuando llega una factura para un NIT que no está en ContaBot.
-    Si se provee pendiente_id, agrega botones Sí/No para que Eduardo confirme.
+    Avisa cuando llega una factura con NIT receptor desconocido.
+    Muestra botones con todas las empresas registradas para que Eduardo seleccione a cuál pertenece.
     """
     token   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -84,12 +84,11 @@ def notificar_empresa_desconocida(datos: dict, fuente: str = "gmail", pendiente_
     total = fmt(datos.get("total_factura"))
 
     texto = (
-        f"⚠️ *Factura para empresa no registrada*\n"
-        f"Llegó una factura por {fuente_label}:\n\n"
-        f"🏢 Empresa receptora: *{nombre or 'desconocida'}*\n"
-        f"🔢 NIT receptor: `{nit}`\n"
-        f"📄 Factura N° {num} de {prov or 'proveedor desconocido'} — {total}\n\n"
-        f"¿*{nombre or nit}* es cliente tuyo y quieres registrarla?"
+        f"⚠️ *No reconocí el receptor de esta factura*\n\n"
+        f"📄 Factura N° {num} de *{prov or 'proveedor desconocido'}* — {total}\n"
+        f"🔢 NIT/CC en factura: `{nit}`\n"
+        f"Via: {fuente_label}\n\n"
+        f"*¿A cuál de tus clientes pertenece?*"
     )
 
     payload = {
@@ -99,12 +98,20 @@ def notificar_empresa_desconocida(datos: dict, fuente: str = "gmail", pendiente_
     }
 
     if pendiente_id:
-        payload["reply_markup"] = json.dumps({
-            "inline_keyboard": [[
-                {"text": "✅ Sí, es cliente mío",  "callback_data": f"confirmar_empresa:{pendiente_id}"},
-                {"text": "❌ No, ignorar",          "callback_data": f"ignorar_empresa:{pendiente_id}"},
-            ]]
-        })
+        teclado = []
+        # Un botón por empresa registrada
+        if empresas:
+            for e in empresas:
+                teclado.append([{
+                    "text": f"📌 {e['razon_social']}",
+                    "callback_data": f"asignar_empresa:{pendiente_id}:{e['id']}"
+                }])
+        # Botón ignorar al final
+        teclado.append([{
+            "text": "❌ No es de ningún cliente, ignorar",
+            "callback_data": f"ignorar_empresa:{pendiente_id}"
+        }])
+        payload["reply_markup"] = json.dumps({"inline_keyboard": teclado})
 
     try:
         req = urllib.request.Request(

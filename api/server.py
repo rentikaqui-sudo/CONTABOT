@@ -1698,8 +1698,15 @@ def subir_factura():
     if not datos:
         return jsonify({"ok": False, "error": "No se pudieron extraer datos de la factura"}), 400
 
-    # Detectar o crear empresa por NIT receptor
+    # Detectar empresa por NIT receptor
     empresa = detectar_o_crear_empresa(datos, sb)
+
+    # Fallback: si el XML dio NIT receptor pero no coincidió, intentar con el NIT del PDF
+    if not empresa and datos_pdf and datos_pdf.get("receptor_nit") and datos_pdf.get("receptor_nit") != datos.get("receptor_nit"):
+        datos["receptor_nit"] = datos_pdf["receptor_nit"]
+        if datos_pdf.get("receptor_nombre"):
+            datos["receptor_nombre"] = datos_pdf["receptor_nombre"]
+        empresa = detectar_o_crear_empresa(datos, sb)
 
     empresa_id = empresa["id"] if empresa else None
     empresa_nombre = empresa["razon_social"] if empresa else "Empresa desconocida"
@@ -1707,8 +1714,8 @@ def subir_factura():
     # Verificar si es empresa conocida — si no, avisar por Telegram con botones y devolver info al UI
     if not empresa_id:
         pendiente_id = guardar_empresa_pendiente(datos, fuente="upload", sb=sb)
-        notificar_empresa_desconocida(datos, fuente="upload", pendiente_id=pendiente_id)
         empresas_all = sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
+        notificar_empresa_desconocida(datos, fuente="upload", pendiente_id=pendiente_id, empresas=empresas_all)
         return jsonify({
             "ok": True,
             "datos": datos,
@@ -1853,7 +1860,56 @@ def telegram_webhook():
         except Exception:
             pass
 
-    if data.startswith("confirmar_empresa:"):
+    if data.startswith("asignar_empresa:"):
+        # Formato: asignar_empresa:pendiente_id:empresa_id
+        partes = data.split(":")
+        pendiente_id = partes[1] if len(partes) > 1 else None
+        empresa_id   = int(partes[2]) if len(partes) > 2 else None
+        answer("Asignando…")
+        try:
+            row = sb.table("empresas_pendientes").select("*").eq("id", pendiente_id).execute().data
+            if not row:
+                edit_message("⚠️ Esta factura ya fue procesada anteriormente.")
+                return jsonify({"ok": True})
+            p = row[0]
+            datos  = p["factura_data"] or {}
+            fuente = p["fuente"] or "upload"
+
+            emp_row = sb.table("empresas_clientes").select("razon_social").eq("id", empresa_id).execute().data
+            empresa_nombre = emp_row[0]["razon_social"] if emp_row else f"Empresa {empresa_id}"
+
+            from datetime import datetime as dt
+            numero = datos.get("numero", "")
+            ya = sb.table("facturas_gastos").select("id").eq("empresa_id", empresa_id).eq("numero", numero).execute()
+            if not ya.data and numero:
+                sb.table("facturas_gastos").insert({
+                    "empresa_id":       empresa_id,
+                    "numero":           numero,
+                    "cufe":             datos.get("cufe", ""),
+                    "fecha":            datos.get("fecha") or dt.today().strftime("%Y-%m-%d"),
+                    "proveedor_nit":    datos.get("proveedor_nit", ""),
+                    "proveedor_nombre": datos.get("proveedor_nombre", ""),
+                    "proveedor_ciudad": datos.get("proveedor_ciudad", ""),
+                    "subtotal":         float(datos.get("subtotal") or 0),
+                    "iva":              float(datos.get("iva") or 0),
+                    "total_factura":    float(datos.get("total_factura") or 0),
+                    "valor_neto":       float(datos.get("valor_neto") or datos.get("total_factura") or 0),
+                    "estado":           "pendiente",
+                    "fuente":           fuente,
+                }).execute()
+
+            sb.table("empresas_pendientes").delete().eq("id", pendiente_id).execute()
+            edit_message(
+                f"✅ *Factura asignada correctamente*\n\n"
+                f"📌 Cliente: *{empresa_nombre}*\n"
+                f"📄 Factura N° {numero or '—'}\n\n"
+                f"Ya aparece en el dashboard de ContaBot."
+            )
+        except Exception as ex:
+            print(f"[webhook] Error asignando empresa: {ex}")
+            edit_message(f"❌ Error: {ex}")
+
+    elif data.startswith("confirmar_empresa:"):
         pendiente_id = data.split(":", 1)[1]
         answer("Procesando…")
         try:
@@ -1869,19 +1925,25 @@ def telegram_webhook():
             datos  = p["factura_data"] or {}
             fuente = p["fuente"] or "upload"
 
-            # Crear empresa
-            import random
-            COLORES = ["#6366f1","#10b981","#f59e0b","#ef4444","#3b82f6","#8b5cf6","#ec4899","#14b8a6"]
-            ICONOS  = ["🏢","🏭","🛒","🏗️","💊","🚛","🍽️","📦","⚙️","🏬"]
-            nueva = sb.table("empresas_clientes").insert({
-                "nit":         nit,
-                "razon_social": nombre,
-                "ciudad":      ciudad,
-                "sector":      "General",
-                "color":       random.choice(COLORES),
-                "icono":       random.choice(ICONOS),
-            }).execute()
-            empresa_id = nueva.data[0]["id"] if nueva.data else None
+            # Buscar si la empresa ya existe (por NIT, ignorando dígito verificador)
+            from extractor import detectar_empresa as _detectar_empresa
+            empresa_existente = _detectar_empresa(nit, sb)
+            if empresa_existente:
+                empresa_id = empresa_existente["id"]
+                nombre     = empresa_existente["razon_social"]
+            else:
+                import random
+                COLORES = ["#6366f1","#10b981","#f59e0b","#ef4444","#3b82f6","#8b5cf6","#ec4899","#14b8a6"]
+                ICONOS  = ["🏢","🏭","🛒","🏗️","💊","🚛","🍽️","📦","⚙️","🏬"]
+                nueva = sb.table("empresas_clientes").insert({
+                    "nit":         nit,
+                    "razon_social": nombre,
+                    "ciudad":      ciudad,
+                    "sector":      "General",
+                    "color":       random.choice(COLORES),
+                    "icono":       random.choice(ICONOS),
+                }).execute()
+                empresa_id = nueva.data[0]["id"] if nueva.data else None
 
             if not empresa_id:
                 edit_message("❌ Error creando la empresa. Inténtalo manualmente en ContaBot.")
