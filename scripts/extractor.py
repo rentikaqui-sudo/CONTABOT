@@ -43,10 +43,17 @@ def descomprimir_zip(data: bytes, destino: Path) -> list:
             tmp.write(data)
             tmp_path = tmp.name
         with zipfile.ZipFile(tmp_path, "r") as z:
+            destino_abs = Path(destino).resolve()
             for nombre in z.namelist():
-                if nombre.lower().endswith((".pdf", ".xml")):
-                    z.extract(nombre, destino)
-                    archivos.append(destino / nombre)
+                if not nombre.lower().endswith((".pdf", ".xml")):
+                    continue
+                target = (destino_abs / nombre).resolve()
+                if not str(target).startswith(str(destino_abs)):
+                    continue  # Zip Slip bloqueado
+                if z.getinfo(nombre).file_size > 50 * 1024 * 1024:
+                    continue  # Zip Bomb bloqueado
+                z.extract(nombre, destino)
+                archivos.append(destino / nombre)
         os.unlink(tmp_path)
     except Exception as e:
         print(f"Error descomprimiendo ZIP: {e}")
@@ -103,20 +110,29 @@ def _find_max(root, tag):
     return max(vals, default=0)
 
 
-def _extraer_invoice_embebido(outer_root) -> "ET.Element | None":
+def _extraer_documento_embebido(outer_root) -> "tuple[ET.Element, str] | tuple[None, str]":
     """
-    Si el root es un AttachedDocument DIAN, extrae el Invoice XML embebido
-    en el elemento <Description>. Retorna el root del Invoice interno o None.
+    Extrae el documento UBL embebido en <Description> de un AttachedDocument DIAN.
+    Soporta Invoice (facturas), CreditNote (NC tipo 91) y DebitNote (ND tipo 92).
+    Retorna (elemento, tipo_documento).
     """
+    TIPOS = [
+        ("<Invoice",    "factura"),
+        ("<CreditNote", "nota_credito"),
+        ("<DebitNote",  "nota_debito"),
+    ]
     for el in outer_root.iter():
         tag = el.tag.split("}")[1] if "}" in el.tag else el.tag
-        if tag == "Description" and el.text and "<Invoice" in el.text:
-            try:
-                inner = ET.fromstring(el.text.strip())
-                return _strip_ns(inner)
-            except Exception as e:
-                print(f"Error parseando Invoice embebido: {e}")
-    return None
+        if tag == "Description" and el.text:
+            texto = el.text.strip()
+            for marca, tipo_doc in TIPOS:
+                if marca in texto:
+                    try:
+                        inner = ET.fromstring(texto)
+                        return _strip_ns(inner), tipo_doc
+                    except Exception as e:
+                        print(f"Error parseando {tipo_doc} embebido: {e}")
+    return None, "factura"
 
 
 def extraer_xml(path: str) -> dict | None:
@@ -126,14 +142,20 @@ def extraer_xml(path: str) -> dict | None:
         print(f"Error XML: {e}")
         return None
 
-    # Detectar AttachedDocument DIAN y extraer Invoice interno
+    # Detectar AttachedDocument DIAN y extraer documento interno (Invoice/CreditNote/DebitNote)
     outer_tag = raw_root.tag.split("}")[1] if "}" in raw_root.tag else raw_root.tag
+    tipo_documento = "factura"
     if outer_tag == "AttachedDocument":
-        invoice_root = _extraer_invoice_embebido(raw_root)
-        outer_root   = _strip_ns(raw_root)   # sobre: tiene CompanyID de proveedor/receptor
+        invoice_root, tipo_documento = _extraer_documento_embebido(raw_root)
+        outer_root = _strip_ns(raw_root)
     else:
         invoice_root = None
         outer_root   = None
+        # Detectar tipo por tag raíz directo
+        if "CreditNote" in outer_tag:
+            tipo_documento = "nota_credito"
+        elif "DebitNote" in outer_tag:
+            tipo_documento = "nota_debito"
 
     root = invoice_root if invoice_root is not None else _strip_ns(raw_root)
 
@@ -204,6 +226,12 @@ def extraer_xml(path: str) -> dict | None:
     # IVA: máximo TaxAmount (el valor total del impuesto, más alto que subtotales por línea)
     iva = _find_max(root, "TaxAmount")
 
+    # Referencia a factura original (solo en Notas de Crédito/Débito)
+    referencia_nc = None
+    if tipo_documento in ("nota_credito", "nota_debito"):
+        referencia_nc = _find_under(root, "BillingReference", "ID") or \
+                        _find_under(root, "InvoiceDocumentReference", "ID")
+
     datos = {
         "cufe":              cufe_el.text.strip(),
         "numero":            numero_factura,
@@ -216,6 +244,8 @@ def extraer_xml(path: str) -> dict | None:
         "subtotal":          subtotal,
         "iva":               iva,
         "total_factura":     total,
+        "tipo_documento":    tipo_documento,
+        "referencia_nc":     referencia_nc,
     }
     datos["valor_neto"] = total
     return datos if datos.get("numero") else None
@@ -228,7 +258,8 @@ def extraer_pdf(path: str) -> dict | None:
         print("PyMuPDF no disponible: pip install pymupdf")
         return None
     try:
-        text = "\n".join(p.get_text() for p in fitz.open(path))
+        with fitz.open(path) as doc:
+            text = "\n".join(p.get_text() for p in doc)
     except Exception as e:
         print(f"Error PDF: {e}")
         return None
@@ -336,6 +367,35 @@ def detectar_o_crear_empresa(datos: dict, sb) -> dict | None:
     if not receptor_nit:
         return None
     return detectar_empresa(receptor_nit, sb)
+
+
+def subir_a_storage(ruta_local: str, empresa_id: int, numero: str, fecha: str, sb) -> str | None:
+    """
+    Sube el archivo a Supabase Storage en facturas/{empresa_id}/{YYYY-MM}/{numero}.ext
+    Retorna la URL pública, o None si falla.
+    """
+    try:
+        import mimetypes
+        ruta = Path(ruta_local)
+        if not ruta.exists():
+            return None
+        ext = ruta.suffix.lower()
+        # Determinar mes del folder
+        mes_folder = fecha[:7] if fecha and len(fecha) >= 7 else "sin-fecha"
+        storage_path = f"{empresa_id}/{mes_folder}/{numero}{ext}"
+        mime_type = mimetypes.guess_type(str(ruta))[0] or "application/octet-stream"
+        with open(ruta, "rb") as f:
+            sb.storage.from_("facturas").upload(
+                path=storage_path,
+                file=f.read(),
+                file_options={"content-type": mime_type, "upsert": "true"},
+            )
+        # Obtener URL pública
+        url = sb.storage.from_("facturas").get_public_url(storage_path)
+        return url
+    except Exception as e:
+        print(f"Error subiendo a Storage: {e}")
+        return None
 
 
 def guardar_empresa_pendiente(datos: dict, fuente: str, sb) -> str | None:
