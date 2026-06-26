@@ -88,27 +88,29 @@ def extraer_xml(path: str) -> dict | None:
     receptor_nombre = (rec_regname or
                        " ".join(filter(None, [rec_first, rec_last])) or None)
 
-    # Subtotal: buscar en LegalMonetaryTotal específicamente (no en líneas de detalle)
-    subtotal_el = (root.find(".//cac:LegalMonetaryTotal/cbc:LineExtensionAmount", NS) or
-                   root.find(".//cac:LegalMonetaryTotal//cbc:LineExtensionAmount", NS))
-    subtotal = to_float(subtotal_el.text.strip() if subtotal_el is not None and subtotal_el.text else None)
+    # Subtotal: máximo LineExtensionAmount del documento (el total > líneas individuales)
+    all_subtotals = root.findall(".//cbc:LineExtensionAmount", NS)
+    subtotal = max((to_float(el.text) for el in all_subtotals if el.text), default=0)
 
-    # Total: PayableAmount en LegalMonetaryTotal
-    total_el = (root.find(".//cac:LegalMonetaryTotal/cbc:PayableAmount", NS) or
-                root.find(".//cbc:PayableAmount", NS))
-    total = to_float(total_el.text.strip() if total_el is not None and total_el.text else None)
+    # Total: máximo PayableAmount del documento
+    all_totales = root.findall(".//cbc:PayableAmount", NS)
+    total = max((to_float(el.text) for el in all_totales if el.text), default=0)
 
-    # IVA: TaxAmount en TaxTotal
+    # IVA: TaxAmount en TaxTotal (primero buscar específico, luego genérico)
     iva_el = (root.find(".//cac:TaxTotal/cbc:TaxAmount", NS) or
               root.find(".//cbc:TaxAmount", NS))
     iva = to_float(iva_el.text.strip() if iva_el is not None and iva_el.text else None)
+
+    # Nombre proveedor: RegistrationName o Name (algunos proveedores usan uno u otro)
+    prov_nombre = (_xt(root, ".//cac:AccountingSupplierParty//cbc:RegistrationName") or
+                   _xt(root, ".//cac:AccountingSupplierParty//cbc:Name"))
 
     datos = {
         "cufe":              _xt(root, ".//cbc:UUID"),
         "numero":            numero_factura,
         "fecha":             _xt(root, ".//cbc:IssueDate"),
         "proveedor_nit":     _xt(root, ".//cac:AccountingSupplierParty//cbc:CompanyID"),
-        "proveedor_nombre":  _xt(root, ".//cac:AccountingSupplierParty//cbc:RegistrationName"),
+        "proveedor_nombre":  prov_nombre,
         "proveedor_ciudad":  _xt(root, ".//cac:AccountingSupplierParty//cbc:CityName"),
         "receptor_nit":      receptor_nit,
         "receptor_nombre":   receptor_nombre,
@@ -170,16 +172,18 @@ def extraer_pdf(path: str) -> dict | None:
     if m_nom:
         datos["receptor_nombre"] = m_nom.group(1).strip()
 
-    m = re.search(r"(?:TOTAL\s+(?:A\s+PAGAR|FACTURA)|Valor\s+total)[:\s\$]*([\d\.,]+)", text, re.IGNORECASE)
+    # Total: acepta "TOTAL A PAGAR", "TOTAL A PAGAR CLIENTE", "TOTAL OPERACIÓN", "TOTAL FACTURA"
+    m = re.search(r"TOTAL\s+(?:A\s+PAGAR(?:\s+\w+)?|FACTURA|OPERACI[OÓ]N\s+COP)[^\d\n]*([\d\.,]{4,})", text, re.IGNORECASE)
     if m:
         datos["total_factura"] = parse_monto(m.group(1))
         datos["valor_neto"]    = datos["total_factura"]
 
-    m = re.search(r"(?:Subtotal|Base\s+gravable)[:\s\$]*([\d\.,]+)", text, re.IGNORECASE)
+    m = re.search(r"(?:Subtotal|Base\s+gravable)[:\s\$]*([\d\.,]{4,})", text, re.IGNORECASE)
     if m:
         datos["subtotal"] = parse_monto(m.group(1))
 
-    m = re.search(r"IVA[:\s\$]*([\d\.,]+)", text, re.IGNORECASE)
+    # IVA: buscar valor monetario (mínimo 4 dígitos), no el porcentaje (2 dígitos)
+    m = re.search(r"IVA\s*(?:\d{1,2}[.,]\d{2}\s*%[^\d]*)?([\d\.,]{4,})", text, re.IGNORECASE)
     if m:
         datos["iva"] = parse_monto(m.group(1))
 
