@@ -1516,7 +1516,7 @@ async function loadFlujoCaja(eid) {
       datasets: [
         { label: 'Ingresos (M COP)', data: ingrArr, backgroundColor: 'rgba(16,185,129,.7)', borderColor: '#10b981', borderWidth: 1.5, borderRadius: 4 },
         { label: 'Egresos (M COP)',  data: egrArr,  backgroundColor: 'rgba(239,68,68,.7)',  borderColor: '#ef4444', borderWidth: 1.5, borderRadius: 4 },
-        { label: 'Neto (M COP)',     data: netoArr, type: 'line', borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.1)', borderWidth: 2.5, pointRadius: 4, tension: 0.3, fill: false },
+        { label: 'Neto (M COP)',     data: netoArr, type: 'line', borderColor: '#e8533a', backgroundColor: 'rgba(232,83,58,.1)', borderWidth: 2.5, pointRadius: 4, tension: 0.3, fill: false },
       ]
     },
     options: {
