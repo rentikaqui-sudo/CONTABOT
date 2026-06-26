@@ -792,7 +792,8 @@ def factura_manual():
             }, on_conflict="empresa_id,numero").execute()
         return jsonify({"ok": True})
     except Exception as ex:
-        return jsonify({"ok": False, "error": str(ex)}), 400
+        logging.exception('Error en endpoint')
+        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 400
 
 
 # ── Procesar imagen de factura (QR / OCR) ────────────────────────────────────
@@ -1755,7 +1756,8 @@ def marcar_pagada(tipo, numero, eid):
         sb.table(tabla).update({"estado": "PAGADA"}).eq("numero", numero).eq("empresa_id", eid).execute()
         return jsonify({"ok": True})
     except Exception as ex:
-        return jsonify({"ok": False, "error": str(ex)}), 400
+        logging.exception('Error en endpoint')
+        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 400
 
 
 # ── Borrar factura ────────────────────────────────────────────────────────────
@@ -1785,7 +1787,8 @@ def borrar_factura(tipo, numero, eid):
                 pass
         return jsonify({"ok": True})
     except Exception as ex:
-        return jsonify({"ok": False, "error": str(ex)}), 400
+        logging.exception('Error en endpoint')
+        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 400
 
 
 # ── Borrar empresa ─────────────────────────────────────────────────────────────
@@ -1819,7 +1822,8 @@ def borrar_empresa(eid):
                 pass
         return jsonify({"ok": True})
     except Exception as ex:
-        return jsonify({"ok": False, "error": str(ex)}), 400
+        logging.exception('Error en endpoint')
+        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 400
 
 
 # ── Conciliación bancaria — cruce de extracto CSV vs facturas ─────────────────
@@ -1843,7 +1847,8 @@ def conciliacion_bancaria(eid):
     try:
         df = pd.read_csv(io.StringIO(texto))
     except Exception as ex:
-        return jsonify({"ok": False, "error": f"No se pudo leer el CSV: {str(ex)}"}), 400
+        logging.exception("Error leyendo CSV")
+        return jsonify({"ok": False, "error": "No se pudo leer el archivo CSV"}), 400
 
     df.columns = [c.strip().lower() for c in df.columns]
 
@@ -1991,7 +1996,8 @@ def completar_obligacion():
         }, on_conflict="empresa_id,tipo,vencimiento").execute()
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        logging.exception('Error en endpoint')
+        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
 
 
 @app.route("/api/obligacion/completar", methods=["DELETE"])
@@ -2005,7 +2011,8 @@ def descompletar_obligacion():
         sb.table("obligaciones_completadas").delete().eq("empresa_id", empresa_id).eq("tipo", tipo).eq("vencimiento", vencimiento).execute()
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        logging.exception('Error en endpoint')
+        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
 
 
 @app.route("/api/pendientes", methods=["GET"])
@@ -2017,7 +2024,8 @@ def listar_pendientes():
         empresas = sb.table("empresas_clientes").select("id,nit,razon_social").eq("contador_id", cid).execute().data
         return jsonify({"ok": True, "pendientes": rows, "empresas": empresas})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        logging.exception('Error en endpoint')
+        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
 
 
 @app.route("/api/pendientes/<pendiente_id>/asignar", methods=["POST"])
@@ -2041,7 +2049,8 @@ def asignar_pendiente(pendiente_id):
         sb.table("empresas_pendientes").delete().eq("id", pendiente_id).execute()
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        logging.exception('Error en endpoint')
+        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
 
 
 @app.route("/api/pendientes/<pendiente_id>", methods=["DELETE"])
@@ -2051,7 +2060,8 @@ def eliminar_pendiente(pendiente_id):
         sb.table("empresas_pendientes").delete().eq("id", pendiente_id).execute()
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        logging.exception('Error en endpoint')
+        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
 
 
 # ── Gmail OAuth multi-cliente ────────────────────────────────────────────────
@@ -2103,6 +2113,8 @@ def auth_gmail_callback():
         return f"Google rechazó la autorización: {error}", 400
     if not code or not empresa_id:
         return "Parámetros inválidos", 400
+    err = validate_empresa_ownership(int(empresa_id))
+    if err: return err
     client_id, client_secret = _google_creds()
     redirect_uri = request.host_url.rstrip("/") + "/auth/gmail/callback"
     data = urlencode({
@@ -2154,12 +2166,17 @@ def auth_gmail_callback():
 @app.route("/api/gmail/tokens", methods=["GET"])
 @login_required
 def listar_gmail_tokens():
-    tokens = sb.table("gmail_tokens").select("id,empresa_id,email,token_created_at,activo").execute().data
+    empresa_ids = get_user_empresa_ids()
+    if not empresa_ids:
+        return jsonify({"ok": True, "tokens": []})
+    tokens = sb.table("gmail_tokens").select("id,empresa_id,email,token_created_at,activo").in_("empresa_id", empresa_ids).execute().data
     return jsonify({"ok": True, "tokens": tokens})
 
 @app.route("/api/gmail/tokens/<int:empresa_id>", methods=["DELETE"])
 @login_required
 def desconectar_gmail(empresa_id):
+    err = validate_empresa_ownership(empresa_id)
+    if err: return err
     sb.table("gmail_tokens").delete().eq("empresa_id", empresa_id).execute()
     return jsonify({"ok": True})
 
@@ -2209,7 +2226,8 @@ def activar_push_gmail():
         renovar_todos_los_watches()
         return jsonify({"ok": True, "mensaje": "Watches registrados"})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        logging.exception('Error en endpoint')
+        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
 
 
 @app.route("/api/calendario/notificar", methods=["POST"])
@@ -2245,7 +2263,7 @@ def notificar_obligaciones():
     try:
         urllib.request.urlopen(req, timeout=5)
     except Exception as ex:
-        return jsonify({"ok": False, "error": str(ex)})
+        return jsonify({"ok": False, "error": "Error interno"})
     return jsonify({"ok": True, "enviadas": len(proximas)})
 
 

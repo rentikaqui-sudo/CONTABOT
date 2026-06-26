@@ -317,6 +317,7 @@ def guardar_factura(datos: dict, empresa_id: int, empresa_nit: str,
         "archivo_pdf":    archivo,
         "fuente":         fuente,
         "tipo_documento": datos.get("tipo_documento", "factura"),
+        "tipo_dian":      datos.get("tipo_dian", "01"),
         "referencia_nc":  datos.get("referencia_nc"),
     }
 

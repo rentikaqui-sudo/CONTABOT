@@ -1,8 +1,20 @@
 -- ContaBot Schema completo
 -- Pegar en Supabase SQL Editor y ejecutar (nuevo proyecto)
 
+CREATE TABLE IF NOT EXISTS contadores (
+    id             SERIAL PRIMARY KEY,
+    email          TEXT UNIQUE NOT NULL,
+    password_hash  TEXT NOT NULL,
+    nombre         TEXT NOT NULL,
+    tp_numero      TEXT DEFAULT '',
+    estudio_nombre TEXT DEFAULT '',
+    telefono       TEXT DEFAULT '',
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS empresas_clientes (
     id          SERIAL PRIMARY KEY,
+    contador_id INTEGER REFERENCES contadores(id),
     razon_social TEXT NOT NULL,
     nit         TEXT UNIQUE NOT NULL,
     sector      TEXT,
@@ -35,7 +47,7 @@ CREATE TABLE IF NOT EXISTS facturas_venta (
     reteica             NUMERIC(18,2) DEFAULT 0,
     total_factura       NUMERIC(18,2) DEFAULT 0,
     valor_neto          NUMERIC(18,2) DEFAULT 0,
-    estado              TEXT DEFAULT 'pendiente',
+    estado              TEXT DEFAULT 'PENDIENTE',
     archivo_pdf         TEXT,
     fuente              TEXT DEFAULT 'manual',
     created_at          TIMESTAMPTZ DEFAULT NOW(),
@@ -60,7 +72,7 @@ CREATE TABLE IF NOT EXISTS facturas_gastos (
     reteica             NUMERIC(18,2) DEFAULT 0,
     total_factura       NUMERIC(18,2) DEFAULT 0,
     valor_neto          NUMERIC(18,2) DEFAULT 0,
-    estado              TEXT DEFAULT 'pendiente',
+    estado              TEXT DEFAULT 'PENDIENTE',
     archivo_pdf         TEXT,
     fuente              TEXT DEFAULT 'manual',
     created_at          TIMESTAMPTZ DEFAULT NOW(),
@@ -69,6 +81,7 @@ CREATE TABLE IF NOT EXISTS facturas_gastos (
 
 CREATE TABLE IF NOT EXISTS empresas_pendientes (
     id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    contador_id INTEGER REFERENCES contadores(id),
     nit         TEXT,
     razon_social TEXT,
     ciudad      TEXT,
