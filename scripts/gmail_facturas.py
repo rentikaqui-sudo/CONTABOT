@@ -102,24 +102,54 @@ def guardar_remitente(email, nombre_empresa, confianza):
 
 # ── Autenticación Gmail ───────────────────────────────────────────────────────
 
+def _get_client_secrets():
+    """Lee client_id y client_secret desde env vars o gmail_credentials.json."""
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        if CREDS_PATH.exists():
+            raw = json.loads(CREDS_PATH.read_text())
+            w = raw.get("web", raw.get("installed", {}))
+            client_id = w.get("client_id", "")
+            client_secret = w.get("client_secret", "")
+    return client_id, client_secret
+
+def get_gmail_from_supabase(empresa_id: int):
+    """Construye el servicio de Gmail usando el refresh_token guardado en Supabase."""
+    rows = sb.table("gmail_tokens").select("*").eq("empresa_id", empresa_id).eq("activo", True).execute().data
+    if not rows:
+        return None, None
+    t = rows[0]
+    client_id, client_secret = _get_client_secrets()
+    if not client_id:
+        print("ERROR: GOOGLE_CLIENT_ID no configurado")
+        return None, None
+    creds = Credentials(
+        token=None,
+        refresh_token=t["refresh_token"],
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=SCOPES,
+    )
+    creds.refresh(Request())
+    return build("gmail", "v1", credentials=creds), t["email"]
+
 def get_gmail():
+    """Fallback: usa el token local (data/gmail_token.json) para desarrollo."""
     creds = None
     if TOKEN_PATH.exists():
         creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
-
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             if not CREDS_PATH.exists():
                 print(f"\nERROR: No se encontró {CREDS_PATH}")
-                print("Descarga las credenciales OAuth de Google Cloud Console y")
-                print(f"guárdalas como: {CREDS_PATH}")
                 sys.exit(1)
             flow = InstalledAppFlow.from_client_secrets_file(str(CREDS_PATH), SCOPES)
             creds = flow.run_local_server(port=0)
         TOKEN_PATH.write_text(creds.to_json())
-
     return build("gmail", "v1", credentials=creds)
 
 
@@ -187,8 +217,28 @@ def marcar_leido(service, msg_id):
 
 # ── Escaneo principal ─────────────────────────────────────────────────────────
 
-def escanear_inbox(empresa_id, max_correos=100):
-    service = get_gmail()
+def escanear_todas_empresas(max_correos=50):
+    """Escanea el Gmail de todos los clientes con token activo en Supabase."""
+    tokens = sb.table("gmail_tokens").select("empresa_id,email").eq("activo", True).execute().data
+    if not tokens:
+        print("[gmail] No hay cuentas de Gmail conectadas en Supabase.")
+        return
+    for t in tokens:
+        eid = t["empresa_id"]
+        email = t["email"]
+        print(f"\n[gmail] Escaneando {email} (empresa {eid})...")
+        try:
+            service, _ = get_gmail_from_supabase(eid)
+            if not service:
+                print(f"[gmail] No se pudo obtener token para empresa {eid}")
+                continue
+            escanear_inbox(empresa_id=eid, max_correos=max_correos, service=service)
+        except Exception as e:
+            print(f"[gmail] Error empresa {eid} ({email}): {e}")
+
+def escanear_inbox(empresa_id, max_correos=100, service=None):
+    if service is None:
+        service = get_gmail()
 
     # Query amplia — el filtro inteligente lo hace puntaje_es_factura()
     query = "has:attachment is:unread (filename:pdf OR filename:xml OR filename:zip)"
@@ -352,7 +402,10 @@ def registrar_en_db(datos, empresa_id, archivo_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--empresa", type=int, default=1)
+    parser.add_argument("--empresa", type=int, default=None, help="ID empresa (omitir = todas)")
     parser.add_argument("--max",     type=int, default=100)
     args = parser.parse_args()
-    escanear_inbox(empresa_id=args.empresa, max_correos=args.max)
+    if args.empresa:
+        escanear_inbox(empresa_id=args.empresa, max_correos=args.max)
+    else:
+        escanear_todas_empresas(max_correos=args.max)

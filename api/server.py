@@ -5,8 +5,10 @@ Data layer: Supabase (service_role key, bypasses RLS)
 """
 
 import os, json, functools, re, sys
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 from pathlib import Path
+from urllib.parse import urlencode
+import urllib.request as _urllib_req
 from flask import Flask, jsonify, send_from_directory, request, session, redirect
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -1663,6 +1665,116 @@ def eliminar_pendiente(pendiente_id):
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ── Gmail OAuth multi-cliente ────────────────────────────────────────────────
+
+def _google_creds():
+    """Lee client_id y client_secret desde env vars o gmail_credentials.json."""
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        creds_path = Path(BASE_DIR) / "data" / "gmail_credentials.json"
+        if creds_path.exists():
+            raw = json.loads(creds_path.read_text())
+            w = raw.get("web", raw.get("installed", {}))
+            client_id = w.get("client_id", "")
+            client_secret = w.get("client_secret", "")
+    return client_id, client_secret
+
+@app.route("/auth/gmail")
+@login_required
+def auth_gmail():
+    empresa_id = request.args.get("empresa_id", "")
+    email_hint = request.args.get("email", "")
+    if not empresa_id:
+        return "empresa_id requerido", 400
+    client_id, _ = _google_creds()
+    if not client_id:
+        return "GOOGLE_CLIENT_ID no configurado en variables de entorno", 500
+    redirect_uri = request.host_url.rstrip("/") + "/auth/gmail/callback"
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "https://www.googleapis.com/auth/gmail.modify",
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": empresa_id,
+    }
+    if email_hint:
+        params["login_hint"] = email_hint
+    return redirect("https://accounts.google.com/o/oauth2/auth?" + urlencode(params))
+
+@app.route("/auth/gmail/callback")
+@login_required
+def auth_gmail_callback():
+    code = request.args.get("code", "")
+    empresa_id = request.args.get("state", "")
+    error = request.args.get("error", "")
+    if error:
+        return f"Google rechazó la autorización: {error}", 400
+    if not code or not empresa_id:
+        return "Parámetros inválidos", 400
+    client_id, client_secret = _google_creds()
+    redirect_uri = request.host_url.rstrip("/") + "/auth/gmail/callback"
+    data = urlencode({
+        "code": code,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+    }).encode()
+    try:
+        req = _urllib_req.Request(
+            "https://oauth2.googleapis.com/token", data=data, method="POST"
+        )
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        with _urllib_req.urlopen(req, timeout=10) as resp:
+            token_data = json.loads(resp.read())
+    except Exception as e:
+        return f"Error obteniendo tokens de Google: {e}", 500
+    refresh_token = token_data.get("refresh_token", "")
+    if not refresh_token:
+        return "Google no envió refresh_token. Revoca el acceso en myaccount.google.com y vuelve a autorizar.", 400
+    # Obtener email de la cuenta autorizada
+    email = ""
+    try:
+        access_token = token_data.get("access_token", "")
+        req2 = _urllib_req.Request("https://www.googleapis.com/gmail/v1/users/me/profile")
+        req2.add_header("Authorization", f"Bearer {access_token}")
+        with _urllib_req.urlopen(req2, timeout=5) as r:
+            profile = json.loads(r.read())
+            email = profile.get("emailAddress", "")
+    except Exception:
+        pass
+    sb.table("gmail_tokens").upsert({
+        "empresa_id": int(empresa_id),
+        "email": email,
+        "refresh_token": refresh_token,
+        "token_created_at": datetime.now(timezone.utc).isoformat(),
+        "activo": True,
+    }, on_conflict="empresa_id").execute()
+    empresa = sb.table("empresas_clientes").select("razon_social").eq("id", empresa_id).execute().data
+    nombre = empresa[0]["razon_social"] if empresa else f"Empresa {empresa_id}"
+    return f"""<html><body style="font-family:sans-serif;text-align:center;padding:60px">
+    <h2>✅ Gmail conectado</h2>
+    <p><b>{email}</b> autorizado para <b>{nombre}</b></p>
+    <p>El bot leerá este correo cada 2 horas para detectar facturas DIAN.</p>
+    <a href="/" style="background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none">
+    Volver al dashboard</a></body></html>"""
+
+@app.route("/api/gmail/tokens", methods=["GET"])
+@login_required
+def listar_gmail_tokens():
+    tokens = sb.table("gmail_tokens").select("id,empresa_id,email,token_created_at,activo").execute().data
+    return jsonify({"ok": True, "tokens": tokens})
+
+@app.route("/api/gmail/tokens/<int:empresa_id>", methods=["DELETE"])
+@login_required
+def desconectar_gmail(empresa_id):
+    sb.table("gmail_tokens").delete().eq("empresa_id", empresa_id).execute()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/calendario/notificar", methods=["POST"])
 @login_required
 def notificar_obligaciones():
@@ -2061,15 +2173,52 @@ def telegram_webhook():
 # ── Cron jobs (APScheduler) ───────────────────────────────────────────────────
 
 def _cron_gmail():
-    """Escanea Gmail y registra facturas nuevas."""
+    """Escanea Gmail de todos los clientes con token activo."""
     try:
         sys.path.insert(0, SCRIPTS_DIR)
-        from gmail_facturas import escanear_inbox
-        empresas = sb.table("empresas_clientes").select("id").execute().data
-        for e in empresas:
-            escanear_inbox(empresa_id=e["id"], max_correos=50)
+        from gmail_facturas import escanear_todas_empresas
+        escanear_todas_empresas(max_correos=50)
     except Exception as ex:
         print(f"[cron] Gmail error: {ex}")
+
+def _cron_tokens_gmail():
+    """Avisa por Telegram cuando un token de Gmail está en día 6 de 7."""
+    try:
+        tokens = sb.table("gmail_tokens").select("*").eq("activo", True).execute().data
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        chat_id   = os.environ.get("TELEGRAM_CHAT_ID", "")
+        if not bot_token or not chat_id:
+            return
+        host = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+        base_url = f"https://{host}" if host else "http://localhost:5000"
+        for t in tokens:
+            created_raw = t.get("token_created_at", "")
+            if not created_raw:
+                continue
+            created = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+            dias = (datetime.now(timezone.utc) - created).days
+            if dias < 6:
+                continue
+            empresa = sb.table("empresas_clientes").select("razon_social").eq("id", t["empresa_id"]).execute().data
+            nombre = empresa[0]["razon_social"] if empresa else f"Empresa {t['empresa_id']}"
+            link = f"{base_url}/auth/gmail?empresa_id={t['empresa_id']}&email={t['email']}"
+            texto = (
+                f"⚠️ *Token Gmail por vencer — {nombre}*\n"
+                f"📧 {t['email']}\n\n"
+                f"El acceso a Gmail vence mañana (día {dias}/7).\n"
+                f"Toca el link para renovar (solo 30 segundos):\n"
+                f"🔗 {link}\n\n"
+                f"Solo haz clic en _Permitir_ — permisos ya preconfigurados."
+            )
+            payload = json.dumps({"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"}).encode()
+            req = _urllib_req.Request(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                data=payload, headers={"Content-Type": "application/json"}
+            )
+            _urllib_req.urlopen(req, timeout=5)
+            print(f"[tokens] Aviso enviado: {nombre} ({t['email']}) día {dias}")
+    except Exception as ex:
+        print(f"[tokens] Error chequeando tokens: {ex}")
 
 def _cron_obligaciones():
     """Notifica por Telegram las obligaciones que vencen en 7 días."""
@@ -2104,10 +2253,11 @@ def _iniciar_scheduler():
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         scheduler = BackgroundScheduler()
-        scheduler.add_job(_cron_gmail,        "interval", hours=2,  id="gmail")
-        scheduler.add_job(_cron_obligaciones, "interval", hours=24, id="obligaciones")
+        scheduler.add_job(_cron_gmail,        "interval", hours=2,       id="gmail")
+        scheduler.add_job(_cron_obligaciones, "interval", hours=24,      id="obligaciones")
+        scheduler.add_job(_cron_tokens_gmail, "cron",     hour=14, minute=0, id="tokens_gmail")  # 9am Colombia (UTC-5)
         scheduler.start()
-        print("[cron] Scheduler iniciado: Gmail cada 2h, obligaciones cada 24h")
+        print("[cron] Scheduler iniciado: Gmail cada 2h, tokens cada día 9am, obligaciones cada 24h")
     except ImportError:
         print("[cron] APScheduler no instalado — cron desactivado")
     except Exception as ex:
@@ -2133,6 +2283,16 @@ def _migrar_tablas():
          "  realizada_en DATE DEFAULT CURRENT_DATE,"
          "  created_at TIMESTAMPTZ DEFAULT NOW(),"
          "  UNIQUE(empresa_id, tipo, vencimiento)"
+         ");"),
+        ("gmail_tokens",
+         "CREATE TABLE IF NOT EXISTS gmail_tokens ("
+         "  id SERIAL PRIMARY KEY,"
+         "  empresa_id INTEGER REFERENCES empresas_clientes(id) ON DELETE CASCADE,"
+         "  email TEXT NOT NULL,"
+         "  refresh_token TEXT NOT NULL,"
+         "  token_created_at TIMESTAMPTZ DEFAULT NOW(),"
+         "  activo BOOLEAN DEFAULT TRUE,"
+         "  UNIQUE(empresa_id)"
          ");"),
     ]
     for nombre, sql in tablas:

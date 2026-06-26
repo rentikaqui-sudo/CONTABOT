@@ -3,6 +3,30 @@ __pycache__/
 *.pyo
 .env
 *.log
-data/empresa_*/
+
+# Base de datos local
+data/demo.db
+data/*.db
+
+# Credenciales OAuth Google (NUNCA subir)
+data/gmail_credentials.json
+data/gmail_token.json
+
+# Facturas y archivos de clientes reales
+data/facturas_recibidas/
 data/facturas_venta/
 data/facturas_gastos/
+data/empresa_*/
+
+# Backups y datos exportados
+data/backup_*.json
+data/remitentes_facturas.json
+
+# ZIPs de facturas
+*.zip
+
+# Excel con datos reales
+*.xlsx
+
+# Archivos temporales
+.claude/scheduled_tasks.lock
