@@ -31,13 +31,7 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from supabase import create_client
-    _sb_url = os.environ.get("SUPABASE_URL", "")
-    _sb_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
-    if not _sb_url or not _sb_key:
-        print("ERROR: SUPABASE_URL y SUPABASE_SERVICE_KEY deben estar en .env")
-        sys.exit(1)
-    sb = create_client(_sb_url, _sb_key)
+    from supabase import create_client as _create_client
 except ImportError:
     print("ERROR: pip install supabase")
     sys.exit(1)
@@ -49,7 +43,7 @@ load_dotenv(BASE_DIR / ".env")
 
 import sys as _sys
 _sys.path.insert(0, str(BASE_DIR / "scripts"))
-from extractor import extraer_xml, extraer_pdf, descomprimir_zip, detectar_o_crear_empresa, guardar_empresa_pendiente
+from extractor import extraer_xml, extraer_pdf, descomprimir_zip, detectar_o_crear_empresa, guardar_empresa_pendiente, determinar_flujo
 from telegram_notif import notificar_factura, notificar_empresa_desconocida
 ADJUNTOS_DIR  = BASE_DIR / "data" / "facturas_recibidas"
 TOKEN_PATH    = BASE_DIR / "data" / "gmail_token.json"
@@ -57,6 +51,15 @@ CREDS_PATH    = BASE_DIR / "data" / "gmail_credentials.json"
 APRENDIZAJE   = BASE_DIR / "data" / "remitentes_facturas.json"
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+
+
+def get_sb():
+    """Crea el cliente Supabase bajo demanda (no al importar el módulo)."""
+    url = os.environ.get("SUPABASE_URL", "")
+    key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    if not url or not key:
+        raise RuntimeError("SUPABASE_URL y SUPABASE_SERVICE_KEY deben estar en .env")
+    return _create_client(url, key)
 
 # Tipos de documento DIAN que nos interesan
 TIPOS_FACTURA_DIAN = {"01", "02", "04"}  # venta, exportación, contingencia
@@ -114,8 +117,10 @@ def _get_client_secrets():
             client_secret = w.get("client_secret", "")
     return client_id, client_secret
 
-def get_gmail_from_supabase(empresa_id: int):
+def get_gmail_from_supabase(empresa_id: int, sb=None):
     """Construye el servicio de Gmail usando el refresh_token guardado en Supabase."""
+    if sb is None:
+        sb = get_sb()
     rows = sb.table("gmail_tokens").select("*").eq("empresa_id", empresa_id).eq("activo", True).execute().data
     if not rows:
         return None, None
@@ -227,7 +232,8 @@ def registrar_watch(service, empresa_id: int) -> dict:
         "topicName": topic_full,
         "labelFilterBehavior": "INCLUDE"
     }).execute()
-    sb.table("gmail_tokens").update({
+    _sb = get_sb()
+    _sb.table("gmail_tokens").update({
         "history_id":    str(result.get("historyId", "")),
         "watch_expires": str(result.get("expiration", "")),
     }).eq("empresa_id", empresa_id).execute()
@@ -236,7 +242,8 @@ def registrar_watch(service, empresa_id: int) -> dict:
 
 def renovar_todos_los_watches():
     """Renueva el watch de Pub/Sub para todas las cuentas activas."""
-    tokens = sb.table("gmail_tokens").select("*").eq("activo", True).execute().data
+    _sb = get_sb()
+    tokens = _sb.table("gmail_tokens").select("*").eq("activo", True).execute().data
     for t in tokens:
         try:
             service, _ = get_gmail_from_supabase(t["empresa_id"])
@@ -248,6 +255,7 @@ def renovar_todos_los_watches():
 def escanear_desde_history(service, empresa_id: int, email: str, history_id: str):
     """Lee solo los mensajes nuevos desde el último historyId conocido."""
     try:
+        _sb = get_sb()
         history = service.users().history().list(
             userId="me",
             startHistoryId=history_id,
@@ -255,7 +263,7 @@ def escanear_desde_history(service, empresa_id: int, email: str, history_id: str
             labelId="INBOX"
         ).execute()
         nuevo_history_id = str(history.get("historyId", history_id))
-        sb.table("gmail_tokens").update({"history_id": nuevo_history_id}).eq("empresa_id", empresa_id).execute()
+        _sb.table("gmail_tokens").update({"history_id": nuevo_history_id}).eq("empresa_id", empresa_id).execute()
         msg_ids = []
         for h in history.get("history", []):
             for m in h.get("messagesAdded", []):
@@ -283,8 +291,10 @@ def hay_correos_nuevos(service) -> bool:
     except Exception:
         return False
 
-def escanear_todas_empresas(max_correos=50):
+def escanear_todas_empresas(max_correos=50, sb=None):
     """Escanea el Gmail de cada cliente solo si tiene correos no leídos relevantes."""
+    if sb is None:
+        sb = get_sb()
     tokens = sb.table("gmail_tokens").select("empresa_id,email").eq("activo", True).execute().data
     if not tokens:
         print("[gmail] No hay cuentas de Gmail conectadas.")
@@ -412,23 +422,25 @@ def procesar_mensaje(service, msg, empresa_id):
             datos["numero"] = info["numero"]
 
         # Detectar empresa por NIT receptor
-        empresa = detectar_o_crear_empresa(datos, sb)
+        _sb = get_sb()
+        empresa = detectar_o_crear_empresa(datos, _sb)
         if not empresa:
             print(f"    ! Empresa no encontrada (NIT {datos.get('receptor_nit','?')}) — avisando por Telegram con botones")
-            pendiente_id = guardar_empresa_pendiente(datos, fuente="gmail", sb=sb)
-            empresas_all = sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
+            pendiente_id = guardar_empresa_pendiente(datos, fuente="gmail", sb=_sb)
+            empresas_all = _sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
             notificar_empresa_desconocida(datos, fuente="gmail", pendiente_id=pendiente_id, empresas=empresas_all)
             return "ignoradas"
 
         eid_real = empresa["id"]
         empresa_nombre = empresa["razon_social"]
 
-        resultado = registrar_en_db(datos, eid_real, str(file_usado))
+        resultado = registrar_en_db(datos, eid_real, empresa["nit"], str(file_usado))
 
         if resultado == "nuevas" and remitente:
+            flujo = determinar_flujo(datos, empresa["nit"])
             guardar_remitente(remitente, datos.get("proveedor_nombre", ""), confianza)
-            print(f"    OK Registrada: {datos.get('numero')} | {datos.get('proveedor_nombre', remitente)} → {empresa_nombre}")
-            notificar_factura(datos, empresa_nombre, tipo="compra", fuente="gmail")
+            print(f"    OK [{flujo}] Registrada: {datos.get('numero')} | {datos.get('proveedor_nombre', remitente)} → {empresa_nombre}")
+            notificar_factura(datos, empresa_nombre, tipo=flujo, fuente="gmail")
         else:
             print(f"    = Duplicada: {datos.get('numero')}")
 
@@ -441,30 +453,15 @@ def procesar_mensaje(service, msg, empresa_id):
 
 # ── Registro en DB (Supabase) ─────────────────────────────────────────────────
 
-def registrar_en_db(datos, empresa_id, archivo_path):
-    numero = datos.get("numero", "")
-    ya = sb.table("facturas_gastos").select("id")\
-           .eq("empresa_id", empresa_id).eq("numero", numero).execute()
-    if ya.data:
-        return "duplicadas"
-
-    sb.table("facturas_gastos").insert({
-        "empresa_id":        empresa_id,
-        "numero":            numero,
-        "cufe":              datos.get("cufe", ""),
-        "fecha":             datos.get("fecha") or datetime.today().strftime("%Y-%m-%d"),
-        "proveedor_nit":     datos.get("proveedor_nit", ""),
-        "proveedor_nombre":  datos.get("proveedor_nombre", ""),
-        "proveedor_ciudad":  datos.get("proveedor_ciudad", ""),
-        "subtotal":          datos.get("subtotal", 0),
-        "iva":               datos.get("iva", 0),
-        "total_factura":     datos.get("total_factura", 0),
-        "valor_neto":        datos.get("valor_neto", datos.get("total_factura", 0)),
-        "estado":            "pendiente",
-        "archivo_pdf":       archivo_path,
-        "fuente":            "gmail",
-    }).execute()
-    return "nuevas"
+def registrar_en_db(datos, empresa_id, empresa_nit, archivo_path, sb=None):
+    if sb is None:
+        sb = get_sb()
+    from extractor import subir_a_storage, guardar_factura
+    fecha = datos.get("fecha") or datetime.today().strftime("%Y-%m-%d")
+    storage_url = subir_a_storage(archivo_path, empresa_id, datos.get("numero",""), fecha, sb)
+    flujo, resultado = guardar_factura(datos, empresa_id, empresa_nit,
+                                       storage_url or archivo_path, "gmail", sb)
+    return "nuevas" if resultado == "nueva" else "duplicadas"
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

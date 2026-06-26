@@ -226,6 +226,15 @@ def extraer_xml(path: str) -> dict | None:
     # IVA: máximo TaxAmount (el valor total del impuesto, más alto que subtotales por línea)
     iva = _find_max(root, "TaxAmount")
 
+    # Código DIAN del tipo de documento (01 factura, 03 doc equivalente, 91 NC, 92 ND, etc.)
+    tipo_dian = (
+        _find_text(root, "InvoiceTypeCode") or
+        _find_text(root, "CreditNoteTypeCode") or
+        _find_text(root, "DebitNoteTypeCode") or
+        ("91" if tipo_documento == "nota_credito" else
+         "92" if tipo_documento == "nota_debito" else "01")
+    )
+
     # Referencia a factura original (solo en Notas de Crédito/Débito)
     referencia_nc = None
     if tipo_documento in ("nota_credito", "nota_debito"):
@@ -245,10 +254,87 @@ def extraer_xml(path: str) -> dict | None:
         "iva":               iva,
         "total_factura":     total,
         "tipo_documento":    tipo_documento,
+        "tipo_dian":         tipo_dian,
         "referencia_nc":     referencia_nc,
     }
     datos["valor_neto"] = total
     return datos if datos.get("numero") else None
+
+
+# ── Lógica de flujo venta/gasto ───────────────────────────────────────────────
+
+# Tipos DIAN que SIEMPRE son gastos (empresa siempre es el receptor)
+_TIPOS_SIEMPRE_GASTO = {"03", "05", "06"}
+
+def determinar_flujo(datos: dict, empresa_nit: str) -> str:
+    """
+    Determina si el documento es VENTA o GASTO para la empresa.
+
+    Tipos DIAN:
+      01 Factura venta | 02 Exportación | 04 Contingencia
+      91 NC            | 92 ND
+      03 Doc equivalente (tiquetes) → siempre GASTO
+      05 Doc soporte (no obligados) → siempre GASTO
+      06 Nota ajuste DS             → siempre GASTO
+
+    Regla: si la empresa es el PROVEEDOR/EMISOR → VENTA
+           si la empresa es el RECEPTOR          → GASTO
+    """
+    if datos.get("tipo_dian") in _TIPOS_SIEMPRE_GASTO:
+        return "gasto"
+    empresa_base = _nit_base(empresa_nit)
+    prov_base    = _nit_base(datos.get("proveedor_nit", ""))
+    if empresa_base and prov_base and empresa_base == prov_base:
+        return "venta"
+    return "gasto"
+
+
+def guardar_factura(datos: dict, empresa_id: int, empresa_nit: str,
+                    archivo: str, fuente: str, sb) -> tuple:
+    """
+    Guarda en facturas_venta o facturas_gastos según el rol de la empresa.
+    Retorna (flujo: 'venta'|'gasto', resultado: 'nueva'|'duplicada').
+    """
+    from datetime import date as _date
+    flujo  = determinar_flujo(datos, empresa_nit)
+    tabla  = "facturas_venta" if flujo == "venta" else "facturas_gastos"
+    numero = datos.get("numero", "")
+
+    ya = sb.table(tabla).select("id").eq("empresa_id", empresa_id).eq("numero", numero).execute()
+    if ya.data:
+        return flujo, "duplicada"
+
+    row = {
+        "empresa_id":     empresa_id,
+        "numero":         numero,
+        "cufe":           datos.get("cufe", ""),
+        "fecha":          datos.get("fecha") or str(_date.today()),
+        "subtotal":       float(datos.get("subtotal") or 0),
+        "iva":            float(datos.get("iva") or 0),
+        "total_factura":  float(datos.get("total_factura") or 0),
+        "valor_neto":     float(datos.get("valor_neto") or datos.get("total_factura") or 0),
+        "estado":         "PENDIENTE",
+        "archivo_pdf":    archivo,
+        "fuente":         fuente,
+        "tipo_documento": datos.get("tipo_documento", "factura"),
+        "referencia_nc":  datos.get("referencia_nc"),
+    }
+
+    if flujo == "venta":
+        row.update({
+            "cliente_nit":    datos.get("receptor_nit", ""),
+            "cliente_nombre": datos.get("receptor_nombre", ""),
+            "cliente_ciudad": datos.get("proveedor_ciudad", ""),
+        })
+    else:
+        row.update({
+            "proveedor_nit":    datos.get("proveedor_nit", ""),
+            "proveedor_nombre": datos.get("proveedor_nombre", ""),
+            "proveedor_ciudad": datos.get("proveedor_ciudad", ""),
+        })
+
+    sb.table(tabla).insert(row).execute()
+    return flujo, "nueva"
 
 
 # ── Extracción PDF ────────────────────────────────────────────────────────────
