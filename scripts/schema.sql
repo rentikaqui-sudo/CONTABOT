@@ -95,5 +95,7 @@ CREATE TABLE IF NOT EXISTS gmail_tokens (
     refresh_token    TEXT NOT NULL,
     token_created_at TIMESTAMPTZ DEFAULT NOW(),
     activo           BOOLEAN DEFAULT TRUE,
+    history_id       TEXT,
+    watch_expires    TEXT,
     UNIQUE(empresa_id)
 );

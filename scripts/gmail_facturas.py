@@ -217,21 +217,90 @@ def marcar_leido(service, msg_id):
 
 # ── Escaneo principal ─────────────────────────────────────────────────────────
 
+def registrar_watch(service, empresa_id: int) -> dict:
+    """Activa notificaciones Push de Gmail via Pub/Sub para esta cuenta."""
+    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT_ID", "")
+    topic      = os.environ.get("PUBSUB_TOPIC_NAME", "contabot-gmail")
+    topic_full = f"projects/{project_id}/topics/{topic}"
+    result = service.users().watch(userId="me", body={
+        "labelIds": ["INBOX"],
+        "topicName": topic_full,
+        "labelFilterBehavior": "INCLUDE"
+    }).execute()
+    sb.table("gmail_tokens").update({
+        "history_id":    str(result.get("historyId", "")),
+        "watch_expires": str(result.get("expiration", "")),
+    }).eq("empresa_id", empresa_id).execute()
+    print(f"[push] Watch registrado empresa {empresa_id} — expira {result.get('expiration')}")
+    return result
+
+def renovar_todos_los_watches():
+    """Renueva el watch de Pub/Sub para todas las cuentas activas."""
+    tokens = sb.table("gmail_tokens").select("*").eq("activo", True).execute().data
+    for t in tokens:
+        try:
+            service, _ = get_gmail_from_supabase(t["empresa_id"])
+            if service:
+                registrar_watch(service, t["empresa_id"])
+        except Exception as e:
+            print(f"[push] Error renovando watch empresa {t['empresa_id']}: {e}")
+
+def escanear_desde_history(service, empresa_id: int, email: str, history_id: str):
+    """Lee solo los mensajes nuevos desde el último historyId conocido."""
+    try:
+        history = service.users().history().list(
+            userId="me",
+            startHistoryId=history_id,
+            historyTypes=["messageAdded"],
+            labelId="INBOX"
+        ).execute()
+        nuevo_history_id = str(history.get("historyId", history_id))
+        sb.table("gmail_tokens").update({"history_id": nuevo_history_id}).eq("empresa_id", empresa_id).execute()
+        msg_ids = []
+        for h in history.get("history", []):
+            for m in h.get("messagesAdded", []):
+                msg_ids.append(m["message"]["id"])
+        if not msg_ids:
+            print(f"[push] {email}: sin mensajes nuevos")
+            return
+        print(f"[push] {email}: {len(msg_ids)} mensajes nuevos")
+        service_obj = service
+        for mid in msg_ids:
+            msg = service_obj.users().messages().get(userId="me", id=mid, format="full").execute()
+            procesar_mensaje(service_obj, msg, empresa_id)
+    except Exception as e:
+        print(f"[push] Error history empresa {empresa_id}: {e}")
+
+def hay_correos_nuevos(service) -> bool:
+    """Consulta liviana: retorna True solo si hay no leídos con adjuntos PDF/XML/ZIP."""
+    try:
+        r = service.users().messages().list(
+            userId="me",
+            q="has:attachment is:unread (filename:pdf OR filename:xml OR filename:zip)",
+            maxResults=1
+        ).execute()
+        return bool(r.get("messages"))
+    except Exception:
+        return False
+
 def escanear_todas_empresas(max_correos=50):
-    """Escanea el Gmail de todos los clientes con token activo en Supabase."""
+    """Escanea el Gmail de cada cliente solo si tiene correos no leídos relevantes."""
     tokens = sb.table("gmail_tokens").select("empresa_id,email").eq("activo", True).execute().data
     if not tokens:
-        print("[gmail] No hay cuentas de Gmail conectadas en Supabase.")
+        print("[gmail] No hay cuentas de Gmail conectadas.")
         return
     for t in tokens:
-        eid = t["empresa_id"]
+        eid   = t["empresa_id"]
         email = t["email"]
-        print(f"\n[gmail] Escaneando {email} (empresa {eid})...")
         try:
             service, _ = get_gmail_from_supabase(eid)
             if not service:
-                print(f"[gmail] No se pudo obtener token para empresa {eid}")
+                print(f"[gmail] Sin token para empresa {eid}")
                 continue
+            if not hay_correos_nuevos(service):
+                print(f"[gmail] {email} — sin correos nuevos, omitiendo")
+                continue
+            print(f"\n[gmail] Escaneando {email} (empresa {eid})...")
             escanear_inbox(empresa_id=eid, max_correos=max_correos, service=service)
         except Exception as e:
             print(f"[gmail] Error empresa {eid} ({email}): {e}")

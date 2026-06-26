@@ -1774,6 +1774,51 @@ def desconectar_gmail(empresa_id):
     sb.table("gmail_tokens").delete().eq("empresa_id", empresa_id).execute()
     return jsonify({"ok": True})
 
+@app.route("/api/gmail/push", methods=["POST"])
+def gmail_push():
+    """Webhook Pub/Sub — Google avisa cuando llega email nuevo a una cuenta autorizada."""
+    import base64
+    data    = request.get_json(silent=True) or {}
+    message = data.get("message", {})
+    if not message:
+        return "ok", 200
+    try:
+        payload    = json.loads(base64.b64decode(message.get("data", "")).decode())
+        email      = payload.get("emailAddress", "")
+        history_id = str(payload.get("historyId", ""))
+    except Exception:
+        return "ok", 200
+    if not email or not history_id:
+        return "ok", 200
+    token_row = sb.table("gmail_tokens").select("*").eq("email", email).eq("activo", True).execute().data
+    if not token_row:
+        return "ok", 200
+    t          = token_row[0]
+    empresa_id = t["empresa_id"]
+    old_hid    = t.get("history_id", "")
+    try:
+        from gmail_facturas import get_gmail_from_supabase, escanear_desde_history
+        service, _ = get_gmail_from_supabase(empresa_id)
+        if service and old_hid:
+            escanear_desde_history(service, empresa_id, email, old_hid)
+        elif service:
+            from gmail_facturas import escanear_inbox
+            escanear_inbox(empresa_id=empresa_id, max_correos=20, service=service)
+    except Exception as e:
+        print(f"[push] Error procesando notificación {email}: {e}")
+    return "ok", 200
+
+@app.route("/api/gmail/activar-push", methods=["POST"])
+@login_required
+def activar_push_gmail():
+    """Registra el watch de Pub/Sub para todas las cuentas activas."""
+    try:
+        from gmail_facturas import renovar_todos_los_watches
+        renovar_todos_los_watches()
+        return jsonify({"ok": True, "mensaje": "Watches registrados"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 @app.route("/api/calendario/notificar", methods=["POST"])
 @login_required
@@ -2173,13 +2218,13 @@ def telegram_webhook():
 # ── Cron jobs (APScheduler) ───────────────────────────────────────────────────
 
 def _cron_gmail():
-    """Escanea Gmail de todos los clientes con token activo."""
+    """Renueva los watches de Pub/Sub (Gmail Push) cada 6 días."""
     try:
         sys.path.insert(0, SCRIPTS_DIR)
-        from gmail_facturas import escanear_todas_empresas
-        escanear_todas_empresas(max_correos=50)
+        from gmail_facturas import renovar_todos_los_watches
+        renovar_todos_los_watches()
     except Exception as ex:
-        print(f"[cron] Gmail error: {ex}")
+        print(f"[cron] Gmail watches error: {ex}")
 
 def _cron_tokens_gmail():
     """Avisa por Telegram cuando un token de Gmail está en día 6 de 7."""
@@ -2253,11 +2298,11 @@ def _iniciar_scheduler():
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         scheduler = BackgroundScheduler()
-        scheduler.add_job(_cron_gmail,        "interval", hours=2,       id="gmail")
+        scheduler.add_job(_cron_gmail,        "interval", days=6,        id="gmail_watches")   # renueva watches Push
         scheduler.add_job(_cron_obligaciones, "interval", hours=24,      id="obligaciones")
         scheduler.add_job(_cron_tokens_gmail, "cron",     hour=14, minute=0, id="tokens_gmail")  # 9am Colombia (UTC-5)
         scheduler.start()
-        print("[cron] Scheduler iniciado: Gmail cada 2h, tokens cada día 9am, obligaciones cada 24h")
+        print("[cron] Scheduler iniciado: Gmail Push (watches c/6d), tokens 9am, obligaciones c/24h")
     except ImportError:
         print("[cron] APScheduler no instalado — cron desactivado")
     except Exception as ex:
