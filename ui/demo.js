@@ -536,6 +536,13 @@ function estadoBadge(estado) {
 document.addEventListener('DOMContentLoaded', () => {
   loadInicio();
   initFormManual();
+  // Verificar pendientes al cargar para mostrar badge
+  fetch('/api/pendientes').then(r => r.json()).then(res => {
+    if (res.ok && res.pendientes && res.pendientes.length > 0) {
+      const badge = document.getElementById('badge-pendientes');
+      if (badge) { badge.textContent = res.pendientes.length; badge.style.display = 'inline'; }
+    }
+  }).catch(() => {});
 });
 
 // ── LOGIN redirect ────────────────────────────────────────────────────────────
@@ -836,6 +843,94 @@ function sfReset() {
   document.getElementById('sf-upload-area').style.display = '';
   document.getElementById('sf-resultado').style.display   = 'none';
   document.getElementById('sf-file-input').value = '';
+}
+
+// ── BANDEJA PENDIENTE ────────────────────────────────────────────────────────
+
+async function cargarPendientes() {
+  const lista = document.getElementById('pendientes-lista');
+  const vacio = document.getElementById('pendientes-vacio');
+  lista.innerHTML = '<p style="color:#64748b;padding:1rem">Cargando...</p>';
+  vacio.style.display = 'none';
+
+  const res = await fetch('/api/pendientes').then(r => r.json());
+  if (!res.ok) { lista.innerHTML = `<p style="color:red">${res.error}</p>`; return; }
+
+  const { pendientes, empresas } = res;
+
+  // Actualizar badge
+  const badge = document.getElementById('badge-pendientes');
+  if (pendientes.length > 0) {
+    badge.textContent = pendientes.length;
+    badge.style.display = 'inline';
+  } else {
+    badge.style.display = 'none';
+  }
+
+  if (!pendientes.length) {
+    lista.innerHTML = '';
+    vacio.style.display = '';
+    return;
+  }
+
+  const fmt = v => v ? `$${Math.round(v).toLocaleString('es-CO')}` : '$0';
+
+  lista.innerHTML = pendientes.map(p => {
+    const d = p.factura_data || {};
+    const opts = empresas.map(e => `<option value="${e.id}">${e.razon_social}</option>`).join('');
+    return `
+    <div class="pend-card" id="pend-${p.id}" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.75rem">
+        <div>
+          <div style="font-weight:700;font-size:15px">📄 ${d.numero || '(sin número)'}</div>
+          <div style="font-size:13px;color:#64748b;margin-top:3px">
+            Proveedor: <b>${d.proveedor_nombre || d.proveedor_nit || '—'}</b>
+            &nbsp;·&nbsp; Fecha: ${d.fecha || '—'}
+          </div>
+          <div style="font-size:13px;color:#64748b">
+            NIT receptor leído: <code style="background:#1e293b;padding:1px 6px;border-radius:4px">${d.receptor_nit || 'no detectado'}</code>
+            &nbsp;·&nbsp; Nombre: ${d.receptor_nombre || '—'}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:20px;font-weight:700;color:var(--green)">${fmt(d.total_factura)}</div>
+          <div style="font-size:12px;color:#64748b">IVA ${fmt(d.iva)}</div>
+        </div>
+      </div>
+      <div style="margin-top:1rem;display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+        <select id="sel-${p.id}" style="flex:1;min-width:200px;padding:.4rem .75rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px">
+          <option value="">— Selecciona empresa —</option>
+          ${opts}
+        </select>
+        <button class="btn-demo" style="padding:.4rem 1rem;font-size:13px" onclick="asignarPendiente('${p.id}')">Asignar</button>
+        <button onclick="ignorarPendiente('${p.id}')" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:13px;padding:.4rem">✕ Ignorar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function asignarPendiente(pendienteId) {
+  const sel = document.getElementById(`sel-${pendienteId}`);
+  if (!sel.value) { alert('Selecciona una empresa'); return; }
+  const res = await fetch(`/api/pendientes/${pendienteId}/asignar`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ empresa_id: parseInt(sel.value) })
+  }).then(r => r.json());
+  if (res.ok) {
+    document.getElementById(`pend-${pendienteId}`).remove();
+    await cargarPendientes();
+    mostrarToast('Factura asignada correctamente');
+  } else {
+    alert('Error: ' + res.error);
+  }
+}
+
+async function ignorarPendiente(pendienteId) {
+  if (!confirm('¿Eliminar esta factura pendiente?')) return;
+  await fetch(`/api/pendientes/${pendienteId}`, { method: 'DELETE' });
+  document.getElementById(`pend-${pendienteId}`).remove();
+  await cargarPendientes();
 }
 
 // ── CREAR / EDITAR EMPRESA ────────────────────────────────────────────────────

@@ -1604,6 +1604,65 @@ def descompletar_obligacion():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/pendientes", methods=["GET"])
+@login_required
+def listar_pendientes():
+    try:
+        rows = sb.table("empresas_pendientes").select("*").order("created_at", desc=True).execute().data
+        empresas = sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
+        return jsonify({"ok": True, "pendientes": rows, "empresas": empresas})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/pendientes/<pendiente_id>/asignar", methods=["POST"])
+@login_required
+def asignar_pendiente(pendiente_id):
+    from datetime import datetime as dt
+    body = request.get_json() or {}
+    empresa_id = body.get("empresa_id")
+    if not empresa_id:
+        return jsonify({"ok": False, "error": "empresa_id requerido"}), 400
+    try:
+        row = sb.table("empresas_pendientes").select("*").eq("id", pendiente_id).execute().data
+        if not row:
+            return jsonify({"ok": False, "error": "No encontrado"}), 404
+        p = row[0]
+        datos = p.get("factura_data") or {}
+        numero = datos.get("numero", "")
+        ya = sb.table("facturas_gastos").select("id").eq("empresa_id", empresa_id).eq("numero", numero).execute()
+        if not ya.data and numero:
+            sb.table("facturas_gastos").insert({
+                "empresa_id":       int(empresa_id),
+                "numero":           numero,
+                "cufe":             datos.get("cufe", ""),
+                "fecha":            datos.get("fecha") or dt.today().strftime("%Y-%m-%d"),
+                "proveedor_nit":    datos.get("proveedor_nit", ""),
+                "proveedor_nombre": datos.get("proveedor_nombre", ""),
+                "proveedor_ciudad": datos.get("proveedor_ciudad", ""),
+                "subtotal":         float(datos.get("subtotal") or 0),
+                "iva":              float(datos.get("iva") or 0),
+                "total_factura":    float(datos.get("total_factura") or 0),
+                "valor_neto":       float(datos.get("valor_neto") or datos.get("total_factura") or 0),
+                "estado":           "pendiente",
+                "fuente":           p.get("fuente", "upload"),
+            }).execute()
+        sb.table("empresas_pendientes").delete().eq("id", pendiente_id).execute()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/pendientes/<pendiente_id>", methods=["DELETE"])
+@login_required
+def eliminar_pendiente(pendiente_id):
+    try:
+        sb.table("empresas_pendientes").delete().eq("id", pendiente_id).execute()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/calendario/notificar", methods=["POST"])
 @login_required
 def notificar_obligaciones():

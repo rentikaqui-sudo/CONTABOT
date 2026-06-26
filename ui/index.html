@@ -36,6 +36,7 @@
   <button class="nav-btn"         data-section="alertas"   onclick="navTo('alertas',this)">Alertas Globales</button>
   <button class="nav-btn"         data-section="factura-manual" onclick="navTo('factura-manual',this)">Ingresar Factura</button>
   <button class="nav-btn"         data-section="subir-factura"  onclick="navTo('subir-factura',this)">Subir Factura</button>
+  <button class="nav-btn"         data-section="pendientes"     onclick="navTo('pendientes',this);cargarPendientes()" id="nav-pendientes">Bandeja Pendiente <span id="badge-pendientes" style="display:none;background:#ef4444;color:#fff;border-radius:99px;padding:1px 7px;font-size:11px;margin-left:4px">0</span></button>
   <button class="nav-btn"         data-section="declaraciones"  onclick="navTo('declaraciones',this)">Declaraciones</button>
   <button class="nav-btn"         data-section="calendario"     onclick="navTo('calendario',this);cargarCalendario()">Calendario</button>
   <button class="nav-btn"         data-section="empresa"   onclick="navTo('empresa',this)" id="nav-empresa" style="display:none">
@@ -681,6 +682,27 @@
     </div>
   </div>
 
+</section>
+
+<!-- ════════════════════════════════════
+     VISTA: BANDEJA PENDIENTE
+═══════════════════════════════════════ -->
+<section id="section-pendientes" class="section">
+  <div class="section-header">
+    <div>
+      <h2>Bandeja Pendiente</h2>
+      <p class="fm-sub">Facturas que llegaron pero no se pudo identificar la empresa receptora. Asígnalas manualmente.</p>
+    </div>
+    <button class="btn-demo" onclick="cargarPendientes()" style="height:38px">🔄 Actualizar</button>
+  </div>
+
+  <div id="pendientes-vacio" style="display:none;text-align:center;padding:3rem;color:#64748b">
+    <div style="font-size:2.5rem;margin-bottom:.75rem">✅</div>
+    <div style="font-weight:600">No hay facturas pendientes</div>
+    <div style="font-size:13px;margin-top:.25rem">Todas las facturas han sido asignadas correctamente.</div>
+  </div>
+
+  <div id="pendientes-lista"></div>
 </section>
 
 <!-- ════════════════════════════════════
