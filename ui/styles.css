@@ -421,3 +421,26 @@ body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); 
 .btn-pagar:disabled { opacity:.6; cursor:default; }
 
 @media(max-width:700px){ .li-preview-row{grid-template-columns:1fr;} }
+
+/* ── CALENDARIO TRIBUTARIO ── */
+.cal-filtros { display:flex; gap:.75rem; margin-bottom:1.5rem; flex-wrap:wrap; }
+.cal-filtros select { padding:.45rem .85rem; border-radius:8px; border:1px solid var(--border); font-family:inherit; font-size:13px; background:var(--bg); color:var(--text); cursor:pointer; }
+.cal-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+.cal-kpi { background:var(--bg2); border-radius:12px; padding:1rem 1.25rem; }
+.cal-kpi-num { font-size:1.8rem; font-weight:800; line-height:1; }
+.cal-kpi-label { font-size:11px; color:var(--muted); margin-top:.3rem; text-transform:uppercase; letter-spacing:.06em; }
+.cal-kpi.urgente .cal-kpi-num { color:var(--red); }
+.cal-kpi.proxima .cal-kpi-num { color:#f59e0b; }
+.cal-kpi.ok      .cal-kpi-num { color:var(--green); }
+.cal-kpi.vencida .cal-kpi-num { color:#9ca3af; }
+
+.cal-tabla { width:100%; border-collapse:collapse; font-size:13px; }
+.cal-tabla th { text-align:left; font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; padding:.6rem 1rem; border-bottom:2px solid var(--border); }
+.cal-tabla td { padding:.75rem 1rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+.cal-tabla tr:hover td { background:var(--bg2); }
+.cal-badge { display:inline-block; padding:.2rem .6rem; border-radius:20px; font-size:11px; font-weight:700; }
+.cal-badge.urgente { background:rgba(239,68,68,.15); color:var(--red); }
+.cal-badge.proxima { background:rgba(245,158,11,.15); color:#b45309; }
+.cal-badge.ok      { background:rgba(16,185,129,.15); color:var(--green); }
+.cal-badge.vencida { background:rgba(156,163,175,.15); color:#6b7280; }
+.cal-empresa-tag { display:inline-block; background:rgba(99,102,241,.12); color:#6366f1; border-radius:6px; padding:.15rem .55rem; font-size:11px; font-weight:600; margin-right:.4rem; }

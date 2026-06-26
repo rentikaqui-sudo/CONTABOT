@@ -170,9 +170,10 @@ async function abrirEmpresa(empresa) {
     <span style="font-size:32px">${empresa.icono}</span>
     <div>
       <div style="font-size:17px;font-weight:700">${empresa.razon_social}</div>
-      <div style="font-size:12px;color:var(--muted)">${empresa.sector} · NIT ${empresa.nit} · ${empresa.ciudad}</div>
-      <div style="font-size:12px;color:var(--muted)">Contacto: ${empresa.contacto}</div>
+      <div style="font-size:12px;color:var(--muted)">${empresa.sector} · NIT ${empresa.nit} · ${empresa.ciudad} · ${empresa.regimen || 'Jurídica'}</div>
+      <div style="font-size:12px;color:var(--muted)">Contacto: ${empresa.contacto || '—'}</div>
     </div>
+    <button class="btn-demo" style="margin-left:auto;font-size:13px;padding:.45rem .9rem" onclick="abrirModalEmpresa(empresaActual)">✏️ Editar</button>
     <div class="empresa-detail-kpis">
       <div class="detail-kpi">
         <div class="detail-kpi-label">Facturado</div>
@@ -701,140 +702,445 @@ function nuevaFactura() {
   recalcular();
 }
 
-// ── LEER IMAGEN ──────────────────────────────────────────────────────────────
+// ── SUBIR FACTURA DIAN ────────────────────────────────────────────────────────
 
-function liDragOver(e) {
+let _sfDatosActuales = null;
+
+function sfDragOver(e) {
   e.preventDefault();
-  document.getElementById('li-upload-area').classList.add('drag-over');
+  document.getElementById('sf-upload-area').classList.add('drag-over');
 }
-function liDragLeave() {
-  document.getElementById('li-upload-area').classList.remove('drag-over');
+function sfDragLeave() {
+  document.getElementById('sf-upload-area').classList.remove('drag-over');
 }
-function liDrop(e) {
+function sfDrop(e) {
   e.preventDefault();
-  liDragLeave();
+  sfDragLeave();
   const file = e.dataTransfer.files[0];
-  if (file) liProcesar(file);
-}
-function liFileSelected(input) {
-  if (input.files[0]) liProcesar(input.files[0]);
+  if (file) sfProcesar(file);
 }
 
-async function liProcesar(file) {
-  const uploadArea = document.getElementById('li-upload-area');
-  const resultado  = document.getElementById('li-resultado');
-  const preview    = document.getElementById('li-preview-img');
-  const estadoCard = document.getElementById('li-estado-card');
-  const estadoIcon = document.getElementById('li-estado-icon');
-  const estadoTit  = document.getElementById('li-estado-titulo');
-  const estadoSub  = document.getElementById('li-estado-sub');
+async function sfProcesar(file) {
+  if (!file) return;
+  const uploadArea = document.getElementById('sf-upload-area');
+  const resultado  = document.getElementById('sf-resultado');
+  const icon       = document.getElementById('sf-estado-icon');
+  const tit        = document.getElementById('sf-estado-titulo');
+  const sub        = document.getElementById('sf-estado-sub');
+  const datosBox   = document.getElementById('sf-datos-box');
+  const selector   = document.getElementById('sf-empresa-selector');
 
-  // Mostrar preview
-  preview.src = URL.createObjectURL(file);
   uploadArea.style.display = 'none';
   resultado.style.display  = 'block';
-  document.getElementById('li-datos-extraidos').style.display = 'none';
-  document.getElementById('li-acciones').style.display = 'none';
-
-  estadoCard.className  = 'li-estado-card';
-  estadoIcon.textContent = '⏳';
-  estadoTit.textContent  = 'Procesando...';
-  estadoSub.textContent  = 'Buscando código QR de la DIAN...';
+  datosBox.style.display   = 'none';
+  selector.style.display   = 'none';
+  icon.textContent = '⏳';
+  tit.textContent  = 'Procesando...';
+  sub.textContent  = 'Extrayendo datos de la factura electrónica...';
 
   const form = new FormData();
-  form.append('imagen', file);
+  form.append('archivo', file);
 
   try {
-    const res  = await fetch('/api/procesar-imagen', { method: 'POST', body: form });
+    const res  = await fetch('/api/subir-factura', { method: 'POST', body: form });
     const data = await res.json();
 
     if (!data.ok) {
-      estadoCard.className   = 'li-estado-card error';
-      estadoIcon.textContent  = '❌';
-      estadoTit.textContent   = 'Error al procesar';
-      estadoSub.textContent   = data.error || 'No se pudo leer la imagen.';
-      document.getElementById('li-acciones').style.display = 'flex';
+      icon.textContent = '❌';
+      tit.textContent  = 'Error';
+      sub.textContent  = data.error || 'No se pudo procesar la factura.';
       return;
     }
 
-    if (data.metodo === 'qr') {
-      estadoCard.className   = 'li-estado-card success';
-      estadoIcon.textContent  = '✅';
-      estadoTit.textContent   = 'QR de la DIAN detectado';
-      estadoSub.textContent   = 'Código QR leído exitosamente. Los datos provienen directamente del portal DIAN — máxima confiabilidad.';
-    } else if (data.metodo === 'ocr') {
-      estadoCard.className   = 'li-estado-card ocr';
-      estadoIcon.textContent  = '🔍';
-      estadoTit.textContent   = 'Texto reconocido (OCR)';
-      estadoSub.textContent   = 'No se encontró QR. Se usó reconocimiento óptico de texto. Verifique los valores antes de guardar.';
-    } else {
-      estadoCard.className   = 'li-estado-card error';
-      estadoIcon.textContent  = '⚠️';
-      estadoTit.textContent   = 'No se pudo leer automáticamente';
-      estadoSub.textContent   = data.mensaje || 'Use el formulario manual para ingresar esta factura.';
-      document.getElementById('li-acciones').style.display = 'flex';
+    _sfDatosActuales = data.datos;
+    sfMostrarDatos(data.datos);
+    datosBox.style.display = 'block';
+
+    if (data.duplicada) {
+      icon.textContent = '=';
+      tit.textContent  = 'Factura duplicada';
+      sub.textContent  = data.mensaje;
       return;
     }
 
-    // Mostrar datos extraídos
-    liMostrarDatos(data);
-    document.getElementById('li-datos-extraidos').style.display = 'block';
-    document.getElementById('li-acciones').style.display = 'flex';
-
-    // OCR raw text
-    if (data.metodo === 'ocr' && data.raw) {
-      document.getElementById('li-raw-text').style.display = 'block';
-      document.getElementById('li-raw-pre').textContent = data.raw;
+    if (data.empresa_detectada === false) {
+      icon.textContent = '⚠';
+      tit.textContent  = 'Empresa no detectada';
+      sub.textContent  = data.mensaje;
+      const sel = document.getElementById('sf-empresa-select');
+      sel.innerHTML = '<option value="">— Selecciona empresa —</option>';
+      (data.empresas_disponibles || []).forEach(e => {
+        sel.innerHTML += `<option value="${e.id}">${e.razon_social}</option>`;
+      });
+      selector.style.display = 'block';
+      return;
     }
+
+    icon.textContent = 'OK';
+    tit.textContent  = 'Factura registrada';
+    sub.textContent  = data.mensaje;
 
   } catch (err) {
-    estadoCard.className   = 'li-estado-card error';
-    estadoIcon.textContent  = '❌';
-    estadoTit.textContent   = 'Error de conexión';
-    estadoSub.textContent   = 'No se pudo contactar el servidor.';
-    document.getElementById('li-acciones').style.display = 'flex';
+    icon.textContent = '❌';
+    tit.textContent  = 'Error de conexión';
+    sub.textContent  = 'No se pudo contactar el servidor.';
   }
 }
 
-function liMostrarDatos(data) {
-  const d = data.datos || {};
-  const items = [];
-
+function sfMostrarDatos(d) {
+  if (!d) return;
   const LABELS = {
-    cufe:         ['CUFE', 'blue'],
-    cufe_corto:   ['CUFE', 'blue'],
-    nit:          ['NIT', 'text'],
-    numero:       ['N° Factura', 'text'],
-    fecha:        ['Fecha', 'text'],
-    total_texto:  ['Total', 'green'],
-    url:          ['URL DIAN', 'blue'],
-    fuente:       ['Fuente', 'text'],
-    confiabilidad:['Confiabilidad', d.confiabilidad && d.confiabilidad.startsWith('Alta') ? 'green' : 'yellow'],
+    numero:           'N° Factura',
+    fecha:            'Fecha',
+    proveedor_nombre: 'Proveedor',
+    proveedor_nit:    'NIT Proveedor',
+    receptor_nombre:  'Empresa receptora',
+    receptor_nit:     'NIT Receptor',
+    total_factura:    'Total',
+    iva:              'IVA',
+    subtotal:         'Subtotal',
+    cufe:             'CUFE',
+  };
+  const fmt = v => typeof v === 'number' ? `$${v.toLocaleString('es-CO')}` : v;
+  const items = Object.entries(LABELS)
+    .filter(([k]) => d[k])
+    .map(([k, label]) => {
+      const val = k === 'cufe' ? d[k].slice(0, 20) + '…' : fmt(d[k]);
+      return `<div class="li-dato-item">
+        <div class="li-dato-label">${label}</div>
+        <div class="li-dato-val">${val}</div>
+      </div>`;
+    });
+  document.getElementById('sf-datos-grid').innerHTML = items.join('') || '<p style="color:var(--muted)">Sin datos estructurados.</p>';
+}
+
+async function sfConfirmar() {
+  const empresa_id = document.getElementById('sf-empresa-select').value;
+  if (!empresa_id) { alert('Selecciona una empresa'); return; }
+
+  const res  = await fetch('/api/subir-factura/confirmar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ datos: _sfDatosActuales, empresa_id: parseInt(empresa_id) }),
+  });
+  const data = await res.json();
+
+  document.getElementById('sf-estado-icon').textContent = data.ok ? 'OK' : '❌';
+  document.getElementById('sf-estado-titulo').textContent = data.ok ? 'Factura registrada' : 'Error';
+  document.getElementById('sf-estado-sub').textContent   = data.mensaje || '';
+  document.getElementById('sf-empresa-selector').style.display = 'none';
+}
+
+function sfReset() {
+  _sfDatosActuales = null;
+  document.getElementById('sf-upload-area').style.display = '';
+  document.getElementById('sf-resultado').style.display   = 'none';
+  document.getElementById('sf-file-input').value = '';
+}
+
+// ── CREAR / EDITAR EMPRESA ────────────────────────────────────────────────────
+
+let _empresaEditandoId = null;
+
+function abrirModalEmpresa(empresa) {
+  _empresaEditandoId = empresa ? empresa.id : null;
+  const titulo = document.getElementById('ne-titulo');
+  const btn    = document.getElementById('ne-btn-guardar');
+  titulo.textContent = empresa ? 'Editar Empresa' : 'Nueva Empresa Cliente';
+  btn.textContent    = empresa ? 'Guardar cambios' : 'Guardar empresa';
+
+  document.getElementById('ne-nit').value     = empresa ? (empresa.nit || '') : '';
+  document.getElementById('ne-razon').value   = empresa ? (empresa.razon_social || '') : '';
+  document.getElementById('ne-ciudad').value  = empresa ? (empresa.ciudad || '') : '';
+  document.getElementById('ne-contacto').value = empresa ? (empresa.contacto || '') : '';
+  const sec = document.getElementById('ne-sector');
+  if (empresa && empresa.sector) {
+    for (let opt of sec.options) if (opt.value === empresa.sector || opt.text === empresa.sector) { sec.value = opt.value; break; }
+  } else sec.selectedIndex = 0;
+  const reg = document.getElementById('ne-regimen');
+  const regimenVal = empresa ? (empresa.regimen || 'Juridica') : 'Juridica';
+  for (let opt of reg.options) if (opt.value === regimenVal) { reg.value = regimenVal; break; }
+
+  document.getElementById('ne-error').style.display = 'none';
+  document.getElementById('modal-empresa').style.display = 'flex';
+}
+
+function cerrarModalEmpresa() {
+  document.getElementById('modal-empresa').style.display = 'none';
+  _empresaEditandoId = null;
+}
+
+async function guardarEmpresa() {
+  const btn = document.getElementById('ne-btn-guardar');
+  const err = document.getElementById('ne-error');
+  err.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  const body = {
+    nit:          document.getElementById('ne-nit').value.trim(),
+    razon_social: document.getElementById('ne-razon').value.trim(),
+    ciudad:       document.getElementById('ne-ciudad').value.trim(),
+    sector:       document.getElementById('ne-sector').value,
+    contacto:     document.getElementById('ne-contacto').value.trim(),
+    regimen:      document.getElementById('ne-regimen').value,
   };
 
-  const skip = new Set(['tipo', 'total']);
-  if (d.cufe_corto) skip.add('cufe');  // show cufe_corto instead
-
-  for (const [key, val] of Object.entries(d)) {
-    if (skip.has(key) || !val) continue;
-    const [label, cls] = LABELS[key] || [key, 'text'];
-    const display = key === 'url' && val.length > 60 ? val.slice(0, 60) + '…' : val;
-    items.push(`<div class="li-dato-item">
-      <div class="li-dato-label">${label}</div>
-      <div class="li-dato-val ${cls}">${display}</div>
-    </div>`);
+  try {
+    const isEdit = !!_empresaEditandoId;
+    const url    = isEdit ? `/api/empresa/${_empresaEditandoId}` : '/api/empresas';
+    const method = isEdit ? 'PUT' : 'POST';
+    const res    = await fetch(url, {
+      method, headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      err.textContent = data.error;
+      err.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = isEdit ? 'Guardar cambios' : 'Guardar empresa';
+      return;
+    }
+    cerrarModalEmpresa();
+    if (isEdit && empresaActual) {
+      // Actualizar datos locales y recargar header
+      Object.assign(empresaActual, data.empresa || body);
+      abrirEmpresa(empresaActual);
+    } else {
+      await loadInicio();
+      navTo('inicio', document.querySelector('[data-section="inicio"]'));
+    }
+  } catch (e) {
+    err.textContent = 'Error de conexión';
+    err.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = _empresaEditandoId ? 'Guardar cambios' : 'Guardar empresa';
   }
-
-  document.getElementById('li-datos-grid').innerHTML = items.length
-    ? items.join('')
-    : '<p style="color:var(--muted);font-size:13px">No se extrajeron campos estructurados.</p>';
 }
 
-function liNueva() {
-  document.getElementById('li-upload-area').style.display = '';
-  document.getElementById('li-resultado').style.display   = 'none';
-  document.getElementById('li-file-input').value = '';
-  document.getElementById('li-raw-text').style.display = 'none';
+// ── DECLARACIONES F-300 / F-350 / ICA ────────────────────────────────────────
+
+async function loadDeclaracionesEmpresa(eid) {
+  const box = document.getElementById('decl-contenido');
+  box.innerHTML = '<p style="color:var(--muted);padding:1rem 0">Calculando declaraciones...</p>';
+  const data = await fetch(`/api/empresa/${eid}/declaraciones`).then(r => r.json());
+  if (!data.ok) { box.innerHTML = '<p style="color:var(--red)">Error cargando declaraciones.</p>'; return; }
+
+  const regimen  = data.regimen || 'Juridica';
+  const noAplica = texto => `<p style="color:var(--muted);font-style:italic;padding:.5rem 0">⊘ No aplica para ${regimen === 'Natural' ? 'persona natural' : 'este régimen'}</p>`;
+
+  // F-300 IVA
+  const f300rows = data.aplica_iva && data.f300.length ? data.f300.map(r => `<tr>
+    <td>${r.periodo}</td>
+    <td>${COP(r.base_ventas)}</td>
+    <td style="color:var(--red)">${COP(r.iva_generado)}</td>
+    <td style="color:var(--green)">${COP(r.iva_descontable)}</td>
+    <td style="font-weight:700;color:${r.iva_a_pagar > 0 ? 'var(--red)' : 'var(--green)'}">${COP(r.iva_a_pagar)}</td>
+    <td style="color:var(--muted)">${r.n_facturas_v}v / ${r.n_facturas_g}g</td>
+  </tr>`).join('') : null;
+
+  // F-350 Retefuente
+  const f350rows = data.aplica_rtefte && data.f350.length ? data.f350.map(r => `<tr>
+    <td>${r.periodo}</td>
+    <td>${COP(r.base)}</td>
+    <td style="font-weight:700;color:var(--red)">${COP(r.retefte)}</td>
+    <td style="color:var(--muted)">${r.n_facturas} facturas</td>
+  </tr>`).join('') : (data.aplica_rtefte ? '<tr><td colspan="4" style="color:var(--muted);text-align:center">Sin retenciones en el período</td></tr>' : null);
+
+  // ICA
+  const icarows = data.aplica_ica && data.ica.length ? data.ica.map(r => `<tr>
+    <td>${r.periodo}</td>
+    <td>${COP(r.base)}</td>
+    <td>${r.tasa}</td>
+    <td style="font-weight:700;color:${r.ica_a_pagar > 0 ? 'var(--red)' : 'var(--muted)'}">${COP(r.ica_a_pagar)}</td>
+    <td style="color:var(--muted)">${r.n_facturas} facturas</td>
+  </tr>`).join('') : null;
+
+  const secF300 = f300rows !== null
+    ? `<div class="table-wrap" style="margin-bottom:2rem"><table class="data-table">
+        <thead><tr><th>Período</th><th>Base Ventas</th><th>IVA Generado</th><th>IVA Descontable</th><th>IVA a Pagar</th><th>Facturas</th></tr></thead>
+        <tbody>${f300rows}</tbody></table></div>`
+    : noAplica();
+
+  const secF350 = f350rows !== null
+    ? `<div class="table-wrap" style="margin-bottom:2rem"><table class="data-table">
+        <thead><tr><th>Mes</th><th>Base</th><th>Retención Practicada</th><th>Facturas</th></tr></thead>
+        <tbody>${f350rows}</tbody></table></div>`
+    : noAplica();
+
+  const secICA = icarows !== null
+    ? `<div class="table-wrap" style="margin-bottom:2rem"><table class="data-table">
+        <thead><tr><th>Bimestre</th><th>Base (Ventas)</th><th>Tasa</th><th>ICA a Pagar</th><th>Facturas</th></tr></thead>
+        <tbody>${icarows}</tbody></table></div>`
+    : noAplica();
+
+  box.innerHTML = `
+    <p style="color:var(--muted);font-size:13px;margin:0 0 1.5rem">Régimen: <strong>${regimen}</strong></p>
+    <h3 style="margin:0 0 1rem">Formulario 300 — IVA Cuatrimestral</h3>
+    ${secF300}
+    <h3 style="margin:1.5rem 0 1rem">Formulario 350 — Retefuente Mensual</h3>
+    ${secF350}
+    <h3 style="margin:1.5rem 0 1rem">ICA — Bimestral (Tasa Bogotá 4.14‰)</h3>
+    ${secICA}`;
+}
+
+// ── CONCILIAR DIAN ────────────────────────────────────────────────────────────
+
+function initDian() {
+  document.getElementById('dian-upload-area').style.display = '';
+  document.getElementById('dian-resultado').style.display   = 'none';
+  document.getElementById('dian-file-input').value = '';
+}
+function dianDragOver(e) { e.preventDefault(); document.getElementById('dian-upload-area').classList.add('drag-over'); }
+function dianDragLeave()  { document.getElementById('dian-upload-area').classList.remove('drag-over'); }
+function dianDrop(e)      { e.preventDefault(); dianDragLeave(); const f = e.dataTransfer.files[0]; if(f) dianProcesar(f); }
+
+async function dianProcesar(file) {
+  if (!file || !empresaActual) return;
+  const area = document.getElementById('dian-upload-area');
+  const res_box = document.getElementById('dian-resultado');
+  area.innerHTML = `<div class="li-upload-icon">⏳</div><div class="li-upload-text">Analizando Excel DIAN...</div>`;
+
+  const form = new FormData();
+  form.append('archivo', file);
+
+  try {
+    const res  = await fetch(`/api/empresa/${empresaActual.id}/importar-dian`, { method: 'POST', body: form });
+    const data = await res.json();
+
+    if (!data.ok) {
+      area.innerHTML = `<div class="li-upload-icon">❌</div><div class="li-upload-text" style="color:var(--red)">${data.error}</div><button class="li-select-btn" onclick="initDian()">Intentar de nuevo</button>`;
+      return;
+    }
+
+    area.style.display = 'none';
+    res_box.style.display = 'block';
+
+    const nuevasRows = (data.detalle_nuevas || []).map(f => `<tr>
+      <td>${f.numero || '—'}</td>
+      <td>${f.fecha || '—'}</td>
+      <td>${f.nombre_emisor || '—'}</td>
+      <td>${f.nit_emisor || '—'}</td>
+      <td style="text-align:right">${f.total ? '$' + Math.round(f.total).toLocaleString('es-CO') : '—'}</td>
+      <td style="font-family:monospace;font-size:10px">${(f.cufe||'').slice(0,16)}…</td>
+    </tr>`).join('');
+
+    res_box.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem">
+        <div class="cal-kpi ok"><div class="cal-kpi-num">${data.total_dian}</div><div class="cal-kpi-label">Total en DIAN</div></div>
+        <div class="cal-kpi ok"><div class="cal-kpi-num">${data.ya_en_contabot}</div><div class="cal-kpi-label">Ya en ContaBot</div></div>
+        <div class="cal-kpi ${data.nuevas > 0 ? 'urgente' : 'ok'}"><div class="cal-kpi-num">${data.nuevas}</div><div class="cal-kpi-label">Facturas nuevas</div></div>
+      </div>
+      ${data.nuevas > 0 ? `
+        <h4 style="margin:0 0 .75rem">Facturas en DIAN que no están en ContaBot:</h4>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>N° Factura</th><th>Fecha</th><th>Emisor</th><th>NIT</th><th>Total</th><th>CUFE</th></tr></thead>
+            <tbody>${nuevasRows}</tbody>
+          </table>
+        </div>` : '<p style="color:var(--green);font-weight:600">Todas las facturas DIAN ya están registradas en ContaBot.</p>'}
+      <button class="btn-demo" style="margin-top:1rem" onclick="initDian();document.getElementById('dian-upload-area').style.display=''">Analizar otro archivo</button>`;
+
+  } catch (err) {
+    area.innerHTML = `<div class="li-upload-icon">❌</div><div class="li-upload-text" style="color:var(--red)">Error de conexión</div><button class="li-select-btn" onclick="initDian()">Reintentar</button>`;
+  }
+}
+
+// ── CALENDARIO TRIBUTARIO ─────────────────────────────────────────────────────
+
+let _calData = [];
+
+async function cargarCalendario() {
+  const lista = document.getElementById('cal-lista');
+  lista.innerHTML = '<p style="color:var(--muted);padding:2rem 0">Cargando obligaciones...</p>';
+  try {
+    const res  = await fetch('/api/calendario');
+    const data = await res.json();
+    if (!data.ok) { lista.innerHTML = '<p style="color:var(--red)">Error cargando calendario.</p>'; return; }
+    _calData = data.obligaciones;
+
+    // Poblar filtro de empresas
+    const sel = document.getElementById('cal-filtro-empresa');
+    const empresas = [...new Map(_calData.map(o => [o.empresa_id, o.empresa])).entries()];
+    sel.innerHTML = '<option value="">Todas las empresas</option>';
+    empresas.sort((a,b) => a[1].localeCompare(b[1])).forEach(([id, nombre]) => {
+      sel.innerHTML += `<option value="${id}">${nombre}</option>`;
+    });
+
+    renderCalendario();
+  } catch (e) {
+    lista.innerHTML = '<p style="color:var(--red)">Error de conexión.</p>';
+  }
+}
+
+function renderCalendario() {
+  const filtroEmp    = document.getElementById('cal-filtro-empresa').value;
+  const filtroTipo   = document.getElementById('cal-filtro-tipo').value;
+  const filtroEstado = document.getElementById('cal-filtro-estado').value;
+
+  let obs = _calData;
+  if (filtroEmp)    obs = obs.filter(o => String(o.empresa_id) === filtroEmp);
+  if (filtroTipo)   obs = obs.filter(o => o.tipo === filtroTipo || o.tipo.startsWith(filtroTipo));
+  if (filtroEstado) obs = obs.filter(o => o.estado === filtroEstado);
+
+  // KPIs
+  const conteos = { urgente: 0, proxima: 0, ok: 0, vencida: 0 };
+  obs.forEach(o => conteos[o.estado] = (conteos[o.estado] || 0) + 1);
+  document.getElementById('cal-kpis').innerHTML = [
+    ['urgente', 'Urgentes ≤7d',  conteos.urgente],
+    ['proxima', 'Próximas ≤30d', conteos.proxima],
+    ['ok',      'A tiempo',      conteos.ok],
+    ['vencida', 'Vencidas',      conteos.vencida],
+  ].map(([cls, label, n]) => `
+    <div class="cal-kpi ${cls}">
+      <div class="cal-kpi-num">${n}</div>
+      <div class="cal-kpi-label">${label}</div>
+    </div>`).join('');
+
+  if (!obs.length) {
+    document.getElementById('cal-lista').innerHTML = '<p style="color:var(--muted);padding:2rem 0">Sin obligaciones con estos filtros.</p>';
+    return;
+  }
+
+  const ETIQUETAS = { urgente: 'Urgente', proxima: 'Próxima', ok: 'A tiempo', vencida: 'Vencida' };
+
+  const filas = obs.map(o => {
+    const dias = o.dias_restantes;
+    const diasLabel = dias < 0 ? `Vencida hace ${Math.abs(dias)}d` : dias === 0 ? 'Hoy' : `${dias}d`;
+    return `<tr>
+      <td><span class="cal-empresa-tag">${o.empresa.split(' ').slice(0,3).join(' ')}</span></td>
+      <td><strong>${o.tipo}</strong></td>
+      <td style="color:var(--muted)">${o.periodo}</td>
+      <td>${o.vencimiento}</td>
+      <td style="font-weight:600">${diasLabel}</td>
+      <td><span class="cal-badge ${o.estado}">${ETIQUETAS[o.estado]}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('cal-lista').innerHTML = `
+    <table class="cal-tabla">
+      <thead><tr>
+        <th>Empresa</th><th>Obligación</th><th>Período</th>
+        <th>Vencimiento</th><th>Días</th><th>Estado</th>
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table>`;
+}
+
+async function notificarObligaciones() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+  try {
+    const res  = await fetch('/api/calendario/notificar', { method: 'POST' });
+    const data = await res.json();
+    btn.textContent = data.ok ? `Enviado (${data.enviadas} alertas)` : 'Error';
+    setTimeout(() => { btn.disabled = false; btn.textContent = 'Enviar resumen a Telegram'; }, 3000);
+  } catch {
+    btn.textContent = 'Error';
+    setTimeout(() => { btn.disabled = false; btn.textContent = 'Enviar resumen a Telegram'; }, 2000);
+  }
 }
 
 // ── MARCAR FACTURA COMO PAGADA ────────────────────────────────────────────────
@@ -979,44 +1285,86 @@ let _flujoCajaChart = null;
 async function loadDeclaraciones() {
   const data = await fetch('/api/declaraciones').then(r => r.json());
 
-  document.getElementById('badge-decl').textContent = data.empresas.length + ' empresas';
+  const conRtefte = data.empresas.filter(e => e.aplica_rtefte);
+  const sinRtefte = data.empresas.filter(e => !e.aplica_rtefte);
 
-  // Alerta global de fecha límite
-  const diasCls = data.dias <= 3 ? 'red' : data.dias <= 7 ? 'yellow' : 'green';
-  document.getElementById('decl-fecha-limite').innerHTML = `
-    <div class="decl-alerta ${diasCls}">
-      <div class="decl-alerta-label">Fecha límite declaración</div>
-      <div class="decl-alerta-fecha">${data.fecha_limite}</div>
-      <div class="decl-alerta-dias">${data.dias > 0 ? data.dias + ' días' : data.dias === 0 ? '¡HOY!' : 'VENCIDA'}</div>
+  document.getElementById('badge-decl').textContent = conRtefte.length + ' agentes retenedores';
+
+  // Consolidado
+  document.getElementById('decl-consolidado').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem">
+      <div style="background:var(--bg2);border-radius:12px;padding:1.25rem;border:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">Total a declarar</div>
+        <div style="font-size:1.6rem;font-weight:800;color:var(--red)">${COP(data.total_consolidado)}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:.25rem">Período ${data.mes}</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:12px;padding:1.25rem;border:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">Agentes retenedores</div>
+        <div style="font-size:1.6rem;font-weight:800;color:var(--blue)">${conRtefte.length}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:.25rem">de ${data.empresas.length} empresas</div>
+      </div>
+      ${sinRtefte.length ? `<div style="background:var(--bg2);border-radius:12px;padding:1.25rem;border:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">No obligados Rtefte</div>
+        <div style="font-size:1.6rem;font-weight:800;color:var(--muted)">${sinRtefte.length}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:.25rem">${sinRtefte.map(e=>e.razon_social).join(', ')}</div>
+      </div>` : ''}
     </div>`;
 
-  // Consolidado total
-  document.getElementById('decl-consolidado').innerHTML = `
-    <div class="decl-total-label">Total a declarar — todas las empresas</div>
-    <div class="decl-total-val">${COP(data.total_consolidado)} COP</div>
-    <div class="decl-total-sub">Retefuente + ReteIVA + ReteICA · Período: ${data.mes}</div>`;
-
-  // Grid por empresa
+  // Grid por empresa (solo agentes retenedores)
   const grid = document.getElementById('decl-empresas-grid');
-  grid.innerHTML = data.empresas.map(e => `
-    <div class="decl-card">
-      <div class="decl-card-header" style="border-left:4px solid ${e.color}">
+
+  const cardHTML = (e) => {
+    const diasCls  = !e.aplica_rtefte ? '' : e.dias <= 0 ? '#ef4444' : e.dias <= 7 ? '#f59e0b' : '#10b981';
+    const diasText = e.dias == null ? '' : e.dias <= 0 ? '⚠ DECLARACIÓN VENCIDA' : e.dias <= 3 ? `🔴 Vence en ${e.dias} días` : e.dias <= 7 ? `🟡 Vence en ${e.dias} días` : `✓ Vence el ${e.fecha_limite_label}`;
+    return `
+    <div style="background:var(--bg2);border-radius:14px;border:1px solid var(--border);overflow:hidden">
+      <div style="padding:1rem 1.25rem;border-left:4px solid ${e.color};display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div class="decl-card-empresa">${e.razon_social}</div>
-          <div class="decl-card-nit">NIT ${e.nit}</div>
+          <div style="font-size:15px;font-weight:700">${e.razon_social}</div>
+          <div style="font-size:12px;color:var(--muted)">NIT ${e.nit} · <span style="color:${e.aplica_rtefte?'var(--blue)':'var(--muted)'}">${e.regimen}</span></div>
         </div>
-        <div class="decl-card-total">${COP(e.total)}</div>
+        <div style="text-align:right">
+          <div style="font-size:1.3rem;font-weight:800;color:${e.total>0?'var(--red)':'var(--muted)'}">${COP(e.total)}</div>
+          <div style="font-size:11px;color:var(--muted)">a declarar</div>
+        </div>
       </div>
-      <div class="decl-card-rows">
-        <div class="decl-row"><span>Retefuente practicada</span><span class="red">${COP(e.retefuente)}</span></div>
-        <div class="decl-row"><span>ReteIVA practicada</span><span class="red">${COP(e.reteiva)}</span></div>
-        <div class="decl-row"><span>ReteICA practicada</span><span class="red">${COP(e.reteica)}</span></div>
-        <div class="decl-row muted"><span>Retefuente sufrida (a compensar)</span><span class="blue">(${COP(e.sufrido_retefuente)})</span></div>
+      ${e.aplica_rtefte ? `
+      <div style="padding:.75rem 1.25rem;display:flex;flex-direction:column;gap:.5rem;border-top:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span style="color:var(--muted)">Retefuente practicada</span>
+          <span style="font-weight:600;color:${e.retefuente>0?'var(--red)':'var(--muted)'}">${COP(e.retefuente)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span style="color:var(--muted)">ReteIVA practicada</span>
+          <span style="font-weight:600;color:${e.reteiva>0?'var(--red)':'var(--muted)'}">${COP(e.reteiva)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span style="color:var(--muted)">ReteICA practicada</span>
+          <span style="font-weight:600;color:${e.reteica>0?'var(--red)':'var(--muted)'}">${COP(e.reteica)}</span>
+        </div>
+        ${e.sufrido_retefuente > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;padding-top:.25rem;border-top:1px solid var(--border)">
+          <span style="color:var(--muted)">Retefuente sufrida (a compensar)</span>
+          <span style="color:var(--blue)">(${COP(e.sufrido_retefuente)})</span>
+        </div>` : ''}
       </div>
-      <div class="decl-card-footer ${e.estado === 'VENCIDA' ? 'red' : e.dias <= 7 ? 'yellow' : 'green'}">
-        ${e.estado === 'VENCIDA' ? '⚠ DECLARACIÓN VENCIDA' : e.dias <= 7 ? `⚡ Vence en ${e.dias} días` : `✓ Vence el ${e.fecha_limite}`}
-      </div>
-    </div>`).join('');
+      <div style="padding:.6rem 1.25rem;font-size:12px;font-weight:600;color:${diasCls};background:${diasCls}18;border-top:1px solid var(--border)">
+        ${diasText}
+      </div>` : `
+      <div style="padding:.75rem 1.25rem;font-size:13px;color:var(--muted);border-top:1px solid var(--border);font-style:italic">
+        ⊘ ${e.regimen === 'Natural' ? 'Persona natural — no es agente retenedor' : 'No obligado a declarar retenciones'}
+      </div>`}
+    </div>`;
+  };
+
+  grid.innerHTML = `
+    ${conRtefte.length ? `<h3 style="font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 .75rem">Agentes Retenedores</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem;margin-bottom:1.5rem">
+      ${conRtefte.map(cardHTML).join('')}
+    </div>` : ''}
+    ${sinRtefte.length ? `<h3 style="font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 .75rem">Sin obligación de Retefuente</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem">
+      ${sinRtefte.map(cardHTML).join('')}
+    </div>` : ''}`;
 }
 
 // ── FLUJO DE CAJA ─────────────────────────────────────────────────────────────

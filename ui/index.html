@@ -24,7 +24,7 @@
   </div>
   <div class="header-right">
     <span class="periodo-badge">Ene – Jun 2026</span>
-    <span class="live-badge"><span class="live-dot"></span>DEMO EN VIVO</span>
+    <span class="live-badge"><span class="live-dot"></span>ContaBot 2026</span>
     <a href="/api/logout" class="logout-btn">Cerrar sesión</a>
   </div>
 </header>
@@ -32,11 +32,12 @@
 <!-- ── NAV ── -->
 <nav class="nav">
   <button class="nav-btn active"  data-section="workflow"  onclick="navTo('workflow',this)">Como Funciona</button>
-  <button class="nav-btn"         data-section="inicio"    onclick="navTo('inicio',this)">Ver Demo en Vivo</button>
+  <button class="nav-btn"         data-section="inicio"    onclick="navTo('inicio',this)">Empresas</button>
   <button class="nav-btn"         data-section="alertas"   onclick="navTo('alertas',this)">Alertas Globales</button>
   <button class="nav-btn"         data-section="factura-manual" onclick="navTo('factura-manual',this)">Ingresar Factura</button>
-  <button class="nav-btn"         data-section="leer-imagen"    onclick="navTo('leer-imagen',this)">Leer Imagen</button>
+  <button class="nav-btn"         data-section="subir-factura"  onclick="navTo('subir-factura',this)">Subir Factura</button>
   <button class="nav-btn"         data-section="declaraciones"  onclick="navTo('declaraciones',this)">Declaraciones</button>
+  <button class="nav-btn"         data-section="calendario"     onclick="navTo('calendario',this);cargarCalendario()">Calendario</button>
   <button class="nav-btn"         data-section="empresa"   onclick="navTo('empresa',this)" id="nav-empresa" style="display:none">
     <span id="nav-empresa-nombre">Empresa</span>
   </button>
@@ -52,6 +53,9 @@
 
   <!-- Tarjetas de empresas -->
   <h3 class="section-subtitle">Empresas bajo gestión</h3>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:1rem">
+    <button class="btn-demo" onclick="abrirModalEmpresa()">+ Nueva Empresa</button>
+  </div>
   <div class="empresas-grid" id="empresas-grid"></div>
 
 </section>
@@ -83,8 +87,10 @@
     <button class="subtab"        onclick="subtabTo('retenciones-e',this)">Retenciones</button>
     <button class="subtab"        onclick="subtabTo('flujo-caja',this)">Flujo de Caja</button>
     <button class="subtab" onclick="subtabTo('conciliacion',this)">Conciliación Bancaria</button>
+    <button class="subtab" onclick="subtabTo('declaraciones-e',this);loadDeclaracionesEmpresa(empresaActual.id)">Declaraciones</button>
+    <button class="subtab" onclick="subtabTo('dian-e',this);initDian()">Conciliar DIAN</button>
     <button class="subtab pdf-btn" onclick="descargarInforme()">⬇ PDF</button>
-    <button class="subtab pdf-btn" onclick="descargarExcel()">⬇ Excel</button>
+    <button class="subtab pdf-btn" onclick="descargarExcel()">⬇ Excel Eduardo</button>
   </div>
 
   <!-- Ventas -->
@@ -182,6 +188,29 @@
     </div>
   </div>
 
+  <!-- Declaraciones -->
+  <div id="subtab-declaraciones-e" class="subtab-content">
+    <div id="decl-contenido" style="padding-top:1rem"></div>
+  </div>
+
+  <!-- Conciliar DIAN -->
+  <div id="subtab-dian-e" class="subtab-content">
+    <div style="padding-top:1rem">
+      <h3 style="margin:0 0 .5rem">Conciliación con Excel DIAN</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:1.5rem">Sube el Excel que descargaste del portal DIAN. ContaBot cruza los CUFEs y te dice qué facturas ya están registradas y cuáles son nuevas.</p>
+      <div id="dian-upload-area" class="li-upload-area" style="max-width:500px"
+           ondragover="dianDragOver(event)" ondrop="dianDrop(event)" ondragleave="dianDragLeave(event)">
+        <div class="li-upload-icon">📊</div>
+        <div class="li-upload-title">Arrastra el Excel DIAN aquí</div>
+        <div class="li-upload-sub">Archivo descargado del portal facturacion.dian.gov.co</div>
+        <div class="li-upload-types">XLSX · XLS</div>
+        <input type="file" id="dian-file-input" accept=".xlsx,.xls" style="display:none" onchange="dianProcesar(this.files[0])"/>
+        <button class="li-select-btn" onclick="document.getElementById('dian-file-input').click()">Seleccionar archivo</button>
+      </div>
+      <div id="dian-resultado" style="display:none;margin-top:1.5rem"></div>
+    </div>
+  </div>
+
   <!-- Flujo de caja -->
   <div id="subtab-flujo-caja" class="subtab-content">
     <div class="section-header" style="margin-top:1rem">
@@ -205,15 +234,14 @@
      VISTA: DECLARACIONES DIAN
 ═══════════════════════════════════════ -->
 <section id="section-declaraciones" class="section">
-  <div class="section-header">
+  <div class="section-header" style="margin-bottom:1.25rem">
     <div>
       <h2>Pre-liquidación de Retenciones <span class="badge yellow" id="badge-decl">—</span></h2>
-      <p style="font-size:13px;color:#64748b;margin-top:.3rem">Resumen de retenciones practicadas este período — listo para declarar.</p>
+      <p style="font-size:13px;color:#64748b;margin-top:.3rem">Retenciones practicadas por cada empresa — listo para diligenciar el F-350.</p>
     </div>
-    <div id="decl-fecha-limite" class="decl-alerta-global"></div>
   </div>
-  <div id="decl-consolidado" class="decl-consolidado-card"></div>
-  <div id="decl-empresas-grid" class="decl-grid"></div>
+  <div id="decl-consolidado"></div>
+  <div id="decl-empresas-grid"></div>
 </section>
 
 <!-- ════════════════════════════════════
@@ -601,59 +629,153 @@
 </section>
 
 <!-- ════════════════════════════════════
-     VISTA: LEER IMAGEN DE FACTURA
+     VISTA: SUBIR FACTURA DIAN
 ═══════════════════════════════════════ -->
-<section id="section-leer-imagen" class="section">
+<section id="section-subir-factura" class="section">
 
   <div class="fm-header">
     <div>
-      <h2>Leer Factura desde Imagen o PDF</h2>
-      <p class="fm-sub">Suba una foto o captura de pantalla de una factura. ContaBot intenta leer el <b>código QR de la DIAN</b> primero; si no encuentra QR, usa reconocimiento de texto (OCR).</p>
+      <h2>Subir Factura Electrónica DIAN</h2>
+      <p class="fm-sub">Arrastra el PDF, XML o ZIP de la factura electrónica. ContaBot detecta la empresa automáticamente por el NIT receptor y la registra de una.</p>
     </div>
   </div>
 
   <!-- Zona de upload -->
-  <div class="li-upload-area" id="li-upload-area"
-       ondragover="liDragOver(event)" ondrop="liDrop(event)" ondragleave="liDragLeave(event)">
-    <div class="li-upload-icon">📷</div>
-    <div class="li-upload-title">Arrastre la imagen aquí</div>
-    <div class="li-upload-sub">o haga clic para seleccionar archivo</div>
-    <div class="li-upload-types">JPG · PNG · WEBP · BMP</div>
-    <input type="file" id="li-file-input" accept="image/*" style="display:none" onchange="liFileSelected(this)"/>
-    <button class="li-select-btn" onclick="document.getElementById('li-file-input').click()">Seleccionar imagen</button>
+  <div class="li-upload-area" id="sf-upload-area"
+       ondragover="sfDragOver(event)" ondrop="sfDrop(event)" ondragleave="sfDragLeave(event)">
+    <div class="li-upload-icon">📄</div>
+    <div class="li-upload-title">Arrastra la factura aquí</div>
+    <div class="li-upload-sub">o haz clic para seleccionar archivo</div>
+    <div class="li-upload-types">PDF · XML · ZIP</div>
+    <input type="file" id="sf-file-input" accept=".pdf,.xml,.zip" style="display:none" onchange="sfProcesar(this.files[0])"/>
+    <button class="li-select-btn" onclick="document.getElementById('sf-file-input').click()">Seleccionar archivo</button>
   </div>
 
-  <!-- Estado / resultado -->
-  <div id="li-resultado" style="display:none">
+  <!-- Resultado -->
+  <div id="sf-resultado" style="display:none">
 
-    <!-- Preview + estado -->
-    <div class="li-preview-row">
-      <img id="li-preview-img" class="li-preview-img" src="" alt="preview"/>
-      <div class="li-estado-card" id="li-estado-card">
-        <div class="li-estado-icon" id="li-estado-icon">⏳</div>
-        <div class="li-estado-titulo" id="li-estado-titulo">Procesando...</div>
-        <div class="li-estado-sub" id="li-estado-sub">Buscando código QR de la DIAN...</div>
-      </div>
+    <!-- Estado -->
+    <div class="li-estado-card" id="sf-estado-card" style="max-width:500px;margin:0 auto 1.5rem">
+      <div class="li-estado-icon" id="sf-estado-icon">⏳</div>
+      <div class="li-estado-titulo" id="sf-estado-titulo">Procesando...</div>
+      <div class="li-estado-sub" id="sf-estado-sub">Extrayendo datos de la factura...</div>
     </div>
 
     <!-- Datos extraídos -->
-    <div id="li-datos-extraidos" style="display:none">
-      <h3 class="li-datos-titulo">Datos extraídos</h3>
-      <div class="li-datos-grid" id="li-datos-grid"></div>
-      <div id="li-raw-text" style="display:none">
-        <div class="li-raw-title">Texto reconocido (OCR):</div>
-        <pre class="li-raw-pre" id="li-raw-pre"></pre>
+    <div id="sf-datos-box" style="display:none">
+      <h3 class="li-datos-titulo">Datos de la factura</h3>
+      <div class="li-datos-grid" id="sf-datos-grid"></div>
+
+      <!-- Selector manual de empresa (cuando no se detecta) -->
+      <div id="sf-empresa-selector" style="display:none;margin-top:1.5rem">
+        <p style="color:var(--red);font-weight:600;margin-bottom:.75rem">No se detectó la empresa receptora. Selecciónala:</p>
+        <select id="sf-empresa-select" style="padding:.5rem 1rem;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:14px;width:100%;max-width:400px">
+          <option value="">— Selecciona empresa —</option>
+        </select>
+        <button class="btn-demo" style="margin-top:1rem" onclick="sfConfirmar()">Guardar factura</button>
       </div>
     </div>
 
-    <!-- Botones de acción -->
-    <div class="li-acciones" id="li-acciones" style="display:none">
-      <button class="btn-demo" onclick="liNueva()">Procesar otra imagen</button>
+    <div class="li-acciones" style="margin-top:1.5rem">
+      <button class="btn-demo" onclick="sfReset()">Subir otra factura</button>
     </div>
-
   </div>
 
 </section>
+
+<!-- ════════════════════════════════════
+     VISTA: CALENDARIO TRIBUTARIO
+═══════════════════════════════════════ -->
+<section id="section-calendario" class="section">
+
+  <div class="section-header">
+    <h2>Calendario de Obligaciones Tributarias 2026</h2>
+    <button class="btn-demo" onclick="notificarObligaciones()">Enviar resumen a Telegram</button>
+  </div>
+
+  <!-- Filtros -->
+  <div class="cal-filtros">
+    <select id="cal-filtro-empresa" onchange="renderCalendario()">
+      <option value="">Todas las empresas</option>
+    </select>
+    <select id="cal-filtro-tipo" onchange="renderCalendario()">
+      <option value="">Todos los tipos</option>
+      <option value="Retefuente 350">Retefuente 350</option>
+      <option value="IVA">IVA F-300</option>
+      <option value="ICA">ICA</option>
+      <option value="Renta">Renta</option>
+    </select>
+    <select id="cal-filtro-estado" onchange="renderCalendario()">
+      <option value="">Todos los estados</option>
+      <option value="urgente">Urgente (≤7 días)</option>
+      <option value="proxima">Próxima (≤30 días)</option>
+      <option value="ok">A tiempo</option>
+      <option value="vencida">Vencidas</option>
+    </select>
+  </div>
+
+  <!-- Resumen rápido -->
+  <div class="cal-kpis" id="cal-kpis"></div>
+
+  <!-- Tabla de obligaciones -->
+  <div id="cal-lista"></div>
+
+</section>
+
+<!-- Modal Nueva/Editar Empresa -->
+<div id="modal-empresa" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border-radius:16px;padding:2rem;width:100%;max-width:480px;margin:1rem">
+    <h3 id="ne-titulo" style="margin:0 0 1.5rem;font-size:1.1rem">Nueva Empresa Cliente</h3>
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:.4rem">NIT *</label>
+        <input id="ne-nit" placeholder="900.123.456-7" style="width:100%;padding:.6rem .9rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:.4rem">Razón Social *</label>
+        <input id="ne-razon" placeholder="Empresa SAS" style="width:100%;padding:.6rem .9rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div>
+          <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:.4rem">Ciudad</label>
+          <input id="ne-ciudad" placeholder="Bogotá" style="width:100%;padding:.6rem .9rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:.4rem">Sector</label>
+          <select id="ne-sector" style="width:100%;padding:.6rem .9rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:14px">
+            <option>General</option>
+            <option>Construcción</option>
+            <option>Comercio</option>
+            <option>Servicios</option>
+            <option>Manufactura</option>
+            <option>Salud</option>
+            <option>Transporte</option>
+            <option>Alimentos</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:.4rem">Régimen tributario *</label>
+        <select id="ne-regimen" style="width:100%;padding:.6rem .9rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:14px">
+          <option value="Juridica">Persona Jurídica (Renta may/jul + IVA C + Rtefte + ICA)</option>
+          <option value="GranContribuyente">Gran Contribuyente (Renta feb/abr/jun + IVA B + Rtefte + ICA)</option>
+          <option value="Natural">Persona Natural (solo Renta — ago a oct)</option>
+          <option value="Simple">Régimen Simple SIMPLE (ICA + Renta natural)</option>
+          <option value="Simplificado">Régimen Simplificado (solo Renta)</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:.4rem">Email de contacto</label>
+        <input id="ne-contacto" type="email" placeholder="gerencia@empresa.com" style="width:100%;padding:.6rem .9rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
+      </div>
+      <div id="ne-error" style="display:none;color:var(--red);font-size:13px;font-weight:600"></div>
+    </div>
+    <div style="display:flex;gap:1rem;margin-top:1.5rem;justify-content:flex-end">
+      <button onclick="cerrarModalEmpresa()" style="padding:.65rem 1.25rem;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:inherit;font-size:14px;cursor:pointer">Cancelar</button>
+      <button id="ne-btn-guardar" class="btn-demo" onclick="guardarEmpresa()">Guardar empresa</button>
+    </div>
+  </div>
+</div>
 
 <script src="demo.js"></script>
 </body>
