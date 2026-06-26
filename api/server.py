@@ -1670,14 +1670,30 @@ def subir_factura():
         file_path.write_bytes(data)
         archivos = [file_path]
 
-    # Extraer datos
-    datos = None
-    file_usado = None
+    # Extraer datos — modo híbrido: XML para estructura, PDF para completar huecos
+    datos_xml, datos_pdf, file_usado = None, None, None
     for fp in archivos:
-        datos = extraer_xml(str(fp)) if fp.suffix.lower() == ".xml" else extraer_pdf(str(fp))
-        if datos:
-            file_usado = fp
-            break
+        if fp.suffix.lower() == ".xml":
+            datos_xml = extraer_xml(str(fp))
+            if datos_xml:
+                file_usado = fp
+        elif fp.suffix.lower() == ".pdf":
+            datos_pdf = extraer_pdf(str(fp))
+            if datos_pdf and not file_usado:
+                file_usado = fp
+
+    if datos_xml:
+        datos = datos_xml
+        if datos_pdf:
+            # Completar campos que el XML dejó vacíos o en 0
+            for campo in ["proveedor_nit", "proveedor_nombre", "receptor_nit", "receptor_nombre",
+                          "total_factura", "valor_neto", "subtotal", "iva"]:
+                if not datos.get(campo) and datos_pdf.get(campo):
+                    datos[campo] = datos_pdf[campo]
+    elif datos_pdf:
+        datos = datos_pdf
+    else:
+        datos = None
 
     if not datos:
         return jsonify({"ok": False, "error": "No se pudieron extraer datos de la factura"}), 400

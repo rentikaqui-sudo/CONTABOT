@@ -88,6 +88,21 @@ def extraer_xml(path: str) -> dict | None:
     receptor_nombre = (rec_regname or
                        " ".join(filter(None, [rec_first, rec_last])) or None)
 
+    # Subtotal: buscar en LegalMonetaryTotal específicamente (no en líneas de detalle)
+    subtotal_el = (root.find(".//cac:LegalMonetaryTotal/cbc:LineExtensionAmount", NS) or
+                   root.find(".//cac:LegalMonetaryTotal//cbc:LineExtensionAmount", NS))
+    subtotal = to_float(subtotal_el.text.strip() if subtotal_el is not None and subtotal_el.text else None)
+
+    # Total: PayableAmount en LegalMonetaryTotal
+    total_el = (root.find(".//cac:LegalMonetaryTotal/cbc:PayableAmount", NS) or
+                root.find(".//cbc:PayableAmount", NS))
+    total = to_float(total_el.text.strip() if total_el is not None and total_el.text else None)
+
+    # IVA: TaxAmount en TaxTotal
+    iva_el = (root.find(".//cac:TaxTotal/cbc:TaxAmount", NS) or
+              root.find(".//cbc:TaxAmount", NS))
+    iva = to_float(iva_el.text.strip() if iva_el is not None and iva_el.text else None)
+
     datos = {
         "cufe":              _xt(root, ".//cbc:UUID"),
         "numero":            numero_factura,
@@ -97,9 +112,9 @@ def extraer_xml(path: str) -> dict | None:
         "proveedor_ciudad":  _xt(root, ".//cac:AccountingSupplierParty//cbc:CityName"),
         "receptor_nit":      receptor_nit,
         "receptor_nombre":   receptor_nombre,
-        "subtotal":          to_float(_xt(root, ".//cbc:LineExtensionAmount")),
-        "iva":               to_float(_xt(root, ".//cbc:TaxAmount")),
-        "total_factura":     to_float(_xt(root, ".//cbc:PayableAmount")),
+        "subtotal":          subtotal,
+        "iva":               iva,
+        "total_factura":     total,
     }
     datos["valor_neto"] = datos["total_factura"]
     return datos if datos.get("numero") else None
