@@ -1566,7 +1566,7 @@ def informe_excel(eid):
 
     vs = sb.table("facturas_venta").select(
         "numero,cufe,fecha,cliente_nombre,cliente_nit,subtotal,iva,"
-        "retefuente,reteiva,reteica,total_factura,valor_neto,estado,concepto,tipo_documento"
+        "retefuente,reteiva,reteica,total_factura,valor_neto,estado,tipo_documento"
     ).eq("empresa_id", eid).order("fecha").execute().data
 
     gs = sb.table("facturas_gastos").select(
