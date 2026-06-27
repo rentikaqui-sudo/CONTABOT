@@ -1469,6 +1469,41 @@ def declaraciones_empresa(eid):
     aplica_rtefte = regimen in ("Juridica", "GranContribuyente")
     aplica_ica    = regimen in ("Juridica", "GranContribuyente", "Simple", "responsable_iva")
 
+    # Renta anual — estimación a partir de facturas electrónicas
+    ingresos_renta      = round(sum(signo(r) * (r["valor_neto"] or 0) for r in ventas))
+    gastos_deducibles   = round(sum(r["valor_neto"] or 0 for r in gastos))
+    renta_liquida       = ingresos_renta - gastos_deducibles
+    es_juridica_renta   = regimen in ("Juridica", "GranContribuyente")
+    tasa_impuesto       = 35 if es_juridica_renta else 0
+    impuesto_estimado   = round(renta_liquida * 0.35) if es_juridica_renta and renta_liquida > 0 else 0
+
+    if regimen == "Natural":
+        checklist_renta = [
+            "Patrimonio bruto (inmuebles, vehículos, cuentas bancarias, inversiones a dic 31)",
+            "Pasivos y deudas vigentes",
+            "Ingresos no facturados (arriendos, intereses, dividendos, salarios)",
+            "Gastos deducibles no facturados (salud, educación, dependientes)",
+            "Certificados de retención en la fuente recibidos",
+            "Extractos bancarios del período",
+        ]
+    else:
+        checklist_renta = [
+            "Estado de resultados completo del período",
+            "Balance general (activos y pasivos)",
+            "Provisiones contables",
+            "Deducciones especiales (donaciones, inversiones)",
+            "Retenciones en la fuente que le practicaron",
+        ]
+
+    renta = {
+        "ingresos":               ingresos_renta,
+        "gastos_deducibles":      gastos_deducibles,
+        "renta_liquida_estimada": renta_liquida,
+        "tasa_impuesto":          tasa_impuesto,
+        "impuesto_estimado":      impuesto_estimado,
+        "checklist":              checklist_renta,
+    }
+
     return jsonify({
         "ok":      True,
         "regimen": regimen,
@@ -1476,6 +1511,7 @@ def declaraciones_empresa(eid):
         "f300":  f300 if aplica_iva else [],
         "f350":  f350 if aplica_rtefte else [],
         "ica":   ica  if aplica_ica else [],
+        "renta": renta,
         "aplica_iva":    aplica_iva,
         "aplica_rtefte": aplica_rtefte,
         "aplica_ica":    aplica_ica,

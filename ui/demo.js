@@ -1307,6 +1307,44 @@ async function loadDeclaracionesEmpresa(eid) {
         <tbody>${icarows}</tbody></table></div>`
     : noAplica();
 
+  // Renta anual
+  const renta = data.renta || {};
+  const rliq  = renta.renta_liquida_estimada || 0;
+  const rliqColor = rliq >= 0 ? 'var(--green)' : 'var(--red)';
+  const rentaRows = `
+    <tr>
+      <td>Ingresos identificados (facturas electrónicas)</td>
+      <td>${COP(renta.ingresos || 0)}</td>
+    </tr>
+    <tr>
+      <td>Gastos deducibles identificados (facturas)</td>
+      <td>${COP(renta.gastos_deducibles || 0)}</td>
+    </tr>
+    <tr style="font-weight:700">
+      <td>Base estimada</td>
+      <td style="color:${rliqColor}">${COP(rliq)}</td>
+    </tr>
+    ${renta.tasa_impuesto > 0 ? `<tr>
+      <td>Impuesto estimado (${renta.tasa_impuesto}%)</td>
+      <td style="color:var(--red);font-weight:700">${COP(renta.impuesto_estimado || 0)}</td>
+    </tr>` : ''}`;
+
+  const checklistItems = (renta.checklist || []).map(item => `<li>${item}</li>`).join('');
+
+  const secRenta = `
+    <div class="table-wrap" style="margin-bottom:1rem">
+      <table class="data-table">
+        <thead><tr><th>Concepto</th><th>Valor</th></tr></thead>
+        <tbody>${rentaRows}</tbody>
+      </table>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1rem">
+      <p style="color:var(--muted);font-size:13px;margin:0 0 .75rem">⚠️ Esta estimación solo considera las facturas electrónicas registradas en ContaBot. Para la declaración completa Eduardo necesita recopilar:</p>
+      <ul style="margin:0;padding-left:1.25rem;color:var(--muted);font-size:13px">
+        ${checklistItems}
+      </ul>
+    </div>`;
+
   box.innerHTML = `
     <p style="color:var(--muted);font-size:13px;margin:0 0 1.5rem">Régimen: <strong>${regimen}</strong></p>
     <h3 style="margin:0 0 1rem">Formulario 300 — IVA (por cuatrimestre)</h3>
@@ -1314,7 +1352,9 @@ async function loadDeclaracionesEmpresa(eid) {
     <h3 style="margin:1.5rem 0 1rem">Formulario 350 — Retefuente Mensual</h3>
     ${secF350}
     <h3 style="margin:1.5rem 0 1rem">ICA — Bimestral (Tasa Bogotá 4.14‰)</h3>
-    ${secICA}`;
+    ${secICA}
+    <h3 style="margin:1.5rem 0 1rem">Renta Anual (F-210 / F-110)</h3>
+    ${secRenta}`;
 }
 
 // ── CONCILIAR DIAN ────────────────────────────────────────────────────────────

@@ -1298,6 +1298,7 @@
 
     <ul>
       <li>Verá una lista de facturas pendientes de asignación</li>
+      <li>Cada factura muestra <strong>📧 Encontrado en:</strong> la dirección de correo Gmail donde llegó la factura — útil para saber de qué cuenta proviene si maneja múltiples correos de clientes</li>
       <li>Para cada una, seleccione la empresa correcta en el desplegable</li>
       <li>Haga clic en <strong>"Confirmar"</strong> para que la factura quede registrada en esa empresa</li>
       <li>También puede hacer clic en <strong>"Descartar"</strong> si la factura no corresponde a ninguna empresa registrada</li>
@@ -1331,7 +1332,7 @@
     <h3 id="sec-3-8">3.8 Declaraciones</h3>
 
     <p>
-      Pre-liquidación de las principales obligaciones tributarias, calculada automáticamente a partir de las facturas registradas.
+      Pre-liquidación de las principales obligaciones tributarias, calculada automáticamente a partir de las facturas registradas. Se accede por empresa: <strong>Empresas → clic en la empresa → subtab "Declaraciones"</strong>.
     </p>
 
     <table>
@@ -1339,33 +1340,62 @@
         <th>Declaración</th>
         <th>Formulario DIAN</th>
         <th>Qué calcula</th>
+        <th>Periodicidad</th>
       </tr>
       <tr>
         <td>IVA</td>
         <td>F-300</td>
         <td>IVA generado en ventas menos IVA descontable en compras</td>
+        <td>Cuatrimestral</td>
       </tr>
       <tr>
         <td>Retefuente</td>
         <td>F-350</td>
         <td>Retenciones practicadas a proveedores en el período</td>
+        <td>Mensual</td>
       </tr>
       <tr>
         <td>ICA</td>
         <td>Formulario de la ciudad</td>
-        <td>Impuesto de industria y comercio por ciudad</td>
+        <td>Impuesto de industria y comercio (tasa Bogotá 4.14‰)</td>
+        <td>Bimestral</td>
+      </tr>
+      <tr>
+        <td>Renta</td>
+        <td>F-210 (Natural) / F-110 (Jurídica)</td>
+        <td>Estimación de renta líquida e impuesto sobre la renta (35% jurídicas). Incluye lista de documentos adicionales a recopilar.</td>
+        <td>Anual</td>
       </tr>
     </table>
 
+    <h4>¿Qué empresas ven qué declaraciones?</h4>
     <ul>
-      <li>Filtre por empresa y período (bimestre o mes)</li>
-      <li>Vea el desglose por tarifa y base gravable</li>
-      <li>Botón <strong>"Exportar a Excel"</strong> para descargar el resumen en formato compatible con los formularios DIAN</li>
+      <li><strong>F-300 (IVA):</strong> aplica a Jurídica, Gran Contribuyente y <code>responsable_iva</code></li>
+      <li><strong>F-350 (Retefuente):</strong> aplica a Jurídica y Gran Contribuyente</li>
+      <li><strong>ICA:</strong> aplica a Jurídica, Gran Contribuyente, Simple y <code>responsable_iva</code></li>
+      <li><strong>Renta:</strong> aplica a todos los regímenes (tasa 35% para jurídicas, tabla progresiva para naturales)</li>
+    </ul>
+
+    <h4>Notas de Crédito</h4>
+    <p>
+      El sistema reconoce automáticamente las Notas de Crédito (NC) y las <strong>resta del total</strong> en todas las bases gravables — IVA, ICA y Renta. No requiere ninguna acción de su parte: si una factura de venta es NC, ContaBot le aplica signo negativo al calcular las bases.
+    </p>
+
+    <h4>Excel descargable</h4>
+    <p>
+      El botón <strong>"Exportar a Excel"</strong> genera un archivo con <strong>5 hojas</strong>:
+    </p>
+    <ul>
+      <li><strong>VENTAS</strong> — detalle de todas las facturas de venta del período</li>
+      <li><strong>COMPRAS</strong> — detalle de todas las facturas de gastos del período</li>
+      <li><strong>IVA F-300</strong> — resumen cuatrimestral listo para el formulario</li>
+      <li><strong>RFTE 350</strong> — retenciones mensuales por proveedor</li>
+      <li><strong>ICA</strong> — bases e impuesto bimestral por ciudad</li>
     </ul>
 
     <div class="warning-box">
       <div class="tip-label">Atencion</div>
-      <p>Los valores calculados por ContaBot son una pre-liquidación de referencia basada en las facturas registradas. La liquidación definitiva y la presentación de las declaraciones deben ser verificadas y firmadas por el contador responsable.</p>
+      <p>Los valores calculados por ContaBot son una pre-liquidación de referencia basada en las facturas electrónicas registradas. La liquidación definitiva y la presentación de las declaraciones deben ser verificadas y firmadas por el contador responsable. En particular, la estimación de Renta no incluye ingresos ni gastos no facturados.</p>
     </div>
 
     <!-- 3.9 -->
