@@ -453,13 +453,14 @@ def detectar_empresa(receptor_nit: str, sb) -> dict | None:
 
 def detectar_o_crear_empresa(datos: dict, sb) -> dict | None:
     """
-    Busca la empresa por NIT receptor. Si no existe retorna None
-    (el llamador debe avisar por Telegram para que Eduardo la agregue manualmente).
+    Busca la empresa por NIT receptor (gasto) o proveedor (venta).
+    Primero intenta receptor (caso más común). Si no, intenta proveedor
+    para cuando la empresa es quien emite la factura (ventas).
     """
-    receptor_nit = datos.get("receptor_nit", "")
-    if not receptor_nit:
-        return None
-    return detectar_empresa(receptor_nit, sb)
+    empresa = detectar_empresa(datos.get("receptor_nit", ""), sb)
+    if empresa:
+        return empresa
+    return detectar_empresa(datos.get("proveedor_nit", ""), sb)
 
 
 def subir_a_storage(ruta_local: str, empresa_id: int, numero: str, fecha: str, sb) -> str | None:
