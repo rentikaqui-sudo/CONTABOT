@@ -1840,6 +1840,107 @@ async function loadDeclaraciones() {
     </div>` : ''}`;
 }
 
+// ── GMAIL POR EMPRESA ────────────────────────────────────────────────────────
+
+async function loadGmailEmpresa(eid) {
+  const panel = document.getElementById('gmail-empresa-panel');
+  panel.innerHTML = '<p style="color:var(--muted);padding:.5rem">Cargando...</p>';
+  try {
+    const tokens = await fetch('/api/gmail/tokens').then(r => r.json());
+    const token = (tokens.tokens || []).find(t => t.empresa_id === eid);
+    const conectado = token && token.activo;
+    const email = token ? esc(token.email || '') : '';
+    panel.innerHTML =
+      '<div style="max-width:560px">' +
+        '<div class="kpi-card ' + (conectado ? 'green' : 'yellow') + '" style="margin-bottom:1.25rem">' +
+          '<div class="kpi-label">Estado Gmail</div>' +
+          '<div class="kpi-value" style="font-size:1.1rem">' + (conectado ? 'Conectado' : 'Sin conectar') + '</div>' +
+          (email ? '<div class="kpi-sub">' + email + '</div>' : '') +
+        '</div>' +
+        (!conectado ? '<a href="/auth/gmail?empresa_id=' + eid + '" class="btn-demo" style="display:inline-block;margin-bottom:1.25rem">Conectar Gmail</a>' : '') +
+        (conectado ?
+          '<div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem">' +
+            '<button class="btn-demo" id="btn-scan-gmail" onclick="escanearGmail(' + eid + ')">Escanear bandeja ahora</button>' +
+            '<button class="btn-demo" style="background:var(--red);color:#fff" onclick="limpiarFacturasEmpresa(' + eid + ')">Limpiar facturas (testing)</button>' +
+          '</div>' +
+          '<div id="gmail-scan-resultado"></div>'
+        : '') +
+      '</div>';
+  } catch(e) {
+    panel.innerHTML = '<p style="color:var(--red)">Error cargando estado de Gmail</p>';
+  }
+}
+
+async function escanearGmail(eid) {
+  const btn = document.getElementById('btn-scan-gmail');
+  const res_div = document.getElementById('gmail-scan-resultado');
+  btn.disabled = true;
+  btn.textContent = 'Escaneando...';
+  res_div.innerHTML = '<p style="color:var(--muted)">Buscando facturas en el inbox...</p>';
+  try {
+    const res = await fetch('/api/empresa/' + eid + '/gmail/escanear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ max_correos: 50 }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      res_div.innerHTML =
+        '<div class="kpi-card green" style="max-width:400px">' +
+          '<div class="kpi-label">Resultado del escaneo</div>' +
+          '<div style="margin-top:.5rem;display:grid;grid-template-columns:1fr 1fr;gap:.5rem">' +
+            '<div><b style="color:var(--green)">' + (data.nuevas ?? 0) + '</b> <span class="muted">nuevas</span></div>' +
+            '<div><b style="color:var(--muted)">' + (data.duplicadas ?? 0) + '</b> <span class="muted">duplicadas</span></div>' +
+            '<div><b style="color:var(--yellow)">' + (data.ignoradas ?? 0) + '</b> <span class="muted">ignoradas</span></div>' +
+            '<div><b style="color:var(--red)">' + (data.errores ?? 0) + '</b> <span class="muted">errores</span></div>' +
+          '</div>' +
+        '</div>';
+      if ((data.nuevas ?? 0) > 0) {
+        showToast(data.nuevas + ' factura(s) nueva(s) registradas', 'success');
+        ventasEmpresaData = {};
+        gastosEmpresaData = {};
+      } else {
+        showToast('Escaneo completado — sin facturas nuevas', 'info');
+      }
+    } else {
+      res_div.innerHTML = '<p style="color:var(--red)">' + esc(data.error) + '</p>';
+    }
+  } catch(e) {
+    res_div.innerHTML = '<p style="color:var(--red)">Error al escanear</p>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Escanear bandeja ahora';
+  }
+}
+
+async function limpiarFacturasEmpresa(eid) {
+  abrirConfirmar(
+    'Limpiar todas las facturas',
+    'Se eliminarán TODAS las facturas de ventas y gastos de esta empresa. Solo usar para testing. ¿Continuar?',
+    async () => {
+      try {
+        const res = await fetch('/api/empresa/' + eid + '/facturas/limpiar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirmar: true }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('Limpias: ' + data.gastos_borrados + ' gastos + ' + data.ventas_borradas + ' ventas', 'success');
+          ventasEmpresaData = {};
+          gastosEmpresaData = {};
+          loadGmailEmpresa(eid);
+        } else {
+          showToast(esc(data.error), 'error');
+        }
+      } catch(e) {
+        showToast('Error al limpiar', 'error');
+      }
+    }
+  );
+}
+
+
 // ── FLUJO DE CAJA ─────────────────────────────────────────────────────────────
 
 function _flujoCajaRow(w) {

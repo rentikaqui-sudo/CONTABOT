@@ -165,6 +165,7 @@
     <button class="subtab" onclick="subtabTo('conciliacion',this)">Conciliación Bancaria</button>
     <button class="subtab" onclick="subtabTo('declaraciones-e',this);loadDeclaracionesEmpresa(empresaActual.id)">Declaraciones</button>
     <button class="subtab" onclick="subtabTo('dian-e',this);initDian()">Conciliar DIAN</button>
+    <button class="subtab" onclick="subtabTo('gmail-e',this);loadGmailEmpresa(empresaActual.id)">Gmail</button>
     <button class="subtab pdf-btn" onclick="descargarInforme()">⬇ PDF</button>
     <button class="subtab pdf-btn" onclick="descargarExcel()">⬇ Excel Eduardo</button>
   </div>
@@ -304,6 +305,11 @@
       <span class="fc-ley-item blue">Flujo neto</span>
     </div>
     <div id="flujo-caja-tabla"></div>
+  </div>
+
+  <!-- Gmail -->
+  <div id="subtab-gmail-e" class="subtab-content">
+    <div id="gmail-empresa-panel" style="padding-top:1rem"></div>
   </div>
 
 </section>

@@ -2368,6 +2368,47 @@ def activar_push_gmail():
         return jsonify({"ok": False, "error": "Error interno"}), 500
 
 
+@app.route("/api/empresa/<int:eid>/gmail/escanear", methods=["POST"])
+@login_required
+def escanear_gmail_empresa(eid):
+    """Escaneo manual del inbox de Gmail para una empresa."""
+    err = validate_empresa_ownership(eid)
+    if err: return err
+    body = request.get_json() or {}
+    max_correos = min(int(body.get("max_correos", 50)), 200)
+    try:
+        from gmail_facturas import get_gmail_from_supabase, escanear_inbox
+        service, _ = get_gmail_from_supabase(eid)
+        if not service:
+            return jsonify({"ok": False, "error": "Esta empresa no tiene Gmail conectado"}), 400
+        stats = escanear_inbox(empresa_id=eid, max_correos=max_correos, service=service)
+        _cache_invalidar(session["contador_id"])
+        return jsonify({"ok": True, **stats})
+    except Exception:
+        logging.exception("Error escaneando Gmail empresa %s", eid)
+        return jsonify({"ok": False, "error": "Error interno"}), 500
+
+
+@app.route("/api/empresa/<int:eid>/facturas/limpiar", methods=["POST"])
+@login_required
+def limpiar_facturas_empresa(eid):
+    """Borra TODAS las facturas de una empresa (solo para testing)."""
+    err = validate_empresa_ownership(eid)
+    if err: return err
+    body = request.get_json() or {}
+    confirmar = body.get("confirmar", False)
+    if not confirmar:
+        return jsonify({"ok": False, "error": "Envía confirmar: true para proceder"}), 400
+    try:
+        r_g = sb.table("facturas_gastos").delete().eq("empresa_id", eid).execute()
+        r_v = sb.table("facturas_venta").delete().eq("empresa_id", eid).execute()
+        _cache_invalidar(session["contador_id"])
+        return jsonify({"ok": True, "gastos_borrados": len(r_g.data), "ventas_borradas": len(r_v.data)})
+    except Exception:
+        logging.exception("Error limpiando facturas empresa %s", eid)
+        return jsonify({"ok": False, "error": "Error interno"}), 500
+
+
 @app.route("/api/calendario/notificar", methods=["POST"])
 @login_required
 def notificar_obligaciones():
