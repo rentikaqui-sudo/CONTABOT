@@ -755,7 +755,10 @@ function accionBtn(estado, tabla, numero) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+let contadorNombre = 'el contador';
+
 document.addEventListener('DOMContentLoaded', () => {
+  fetch('/api/me').then(r => r.json()).then(u => { if (u.nombre) contadorNombre = u.nombre; }).catch(() => {});
   loadInicio();
   initFormManual();
   // Verificar pendientes al cargar para mostrar badge
@@ -1339,7 +1342,7 @@ async function loadDeclaracionesEmpresa(eid) {
       </table>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1rem">
-      <p style="color:var(--muted);font-size:13px;margin:0 0 .75rem">⚠️ Esta estimación solo considera las facturas electrónicas registradas en ContaBot. Para la declaración completa Eduardo necesita recopilar:</p>
+      <p style="color:var(--muted);font-size:13px;margin:0 0 .75rem">⚠️ Esta estimación solo considera las facturas electrónicas registradas en ContaBot. Para la declaración completa <b>${esc(contadorNombre)}</b> necesita recopilar:</p>
       <ul style="margin:0;padding-left:1.25rem;color:var(--muted);font-size:13px">
         ${checklistItems}
       </ul>

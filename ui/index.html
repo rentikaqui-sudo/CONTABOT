@@ -105,8 +105,7 @@
 
 <!-- ── NAV ── -->
 <nav class="nav">
-  <button class="nav-btn active"  data-section="workflow"  onclick="navTo('workflow',this)">Como Funciona</button>
-  <button class="nav-btn"         data-section="inicio"    onclick="navTo('inicio',this)">Empresas</button>
+  <button class="nav-btn active"  data-section="inicio"    onclick="navTo('inicio',this)">Empresas</button>
   <button class="nav-btn"         data-section="alertas"   onclick="navTo('alertas',this)">Alertas Globales</button>
   <button class="nav-btn"         data-section="factura-manual" onclick="navTo('factura-manual',this)">Ingresar Factura</button>
   <button class="nav-btn"         data-section="subir-factura"  onclick="navTo('subir-factura',this)">Subir Factura</button>
@@ -122,7 +121,7 @@
 <!-- ════════════════════════════════════
      VISTA: MIS CLIENTES (inicio)
 ═══════════════════════════════════════ -->
-<section id="section-inicio" class="section">
+<section id="section-inicio" class="section active">
 
   <!-- KPIs consolidados -->
   <div class="kpi-grid" id="kpi-consolidado"></div>
@@ -331,7 +330,7 @@
 <!-- ════════════════════════════════════
      VISTA: COMO FUNCIONA (workflow)
 ═══════════════════════════════════════ -->
-<section id="section-workflow" class="section active">
+<section id="section-workflow" class="section">
 
   <div class="wf-hero">
     <div class="wf-hero-tag">Automatizacion contable</div>
@@ -917,6 +916,6 @@
   </div>
 </div>
 
-<script src="demo.js?v=5"></script>
+<script src="demo.js?v=6"></script>
 </body>
 </html>
