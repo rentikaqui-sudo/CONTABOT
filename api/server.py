@@ -275,7 +275,7 @@ def empresas():
 
     empresa_ids = [e["id"] for e in empresas_rows]
     # 2 queries en total en lugar de N+1
-    ventas_all = sb.table("facturas_venta").select("empresa_id,valor_neto,estado").in_("empresa_id", empresa_ids).execute().data
+    ventas_all = sb.table("facturas_venta").select("empresa_id,valor_neto,estado,tipo_documento").in_("empresa_id", empresa_ids).execute().data
     gastos_all = sb.table("facturas_gastos").select("empresa_id,valor_neto,estado").in_("empresa_id", empresa_ids).execute().data
 
     ventas_by_empresa = {}
@@ -290,11 +290,12 @@ def empresas():
         ventas_rows = ventas_by_empresa.get(eid, [])
         gastos_rows = gastos_by_empresa.get(eid, [])
 
+        def _signo_v(r): return -1 if r.get("tipo_documento") == "nota_credito" else 1
         v_n           = len(ventas_rows)
-        v_neto        = sum(r["valor_neto"] or 0 for r in ventas_rows)
-        v_por_cobrar  = sum(r["valor_neto"] or 0 for r in ventas_rows if r["estado"] == "PENDIENTE")
-        v_vencido     = sum(r["valor_neto"] or 0 for r in ventas_rows if "VENCIDA" in str(r["estado"]).upper())
-        v_cobrado     = sum(r["valor_neto"] or 0 for r in ventas_rows if r["estado"] == "PAGADA")
+        v_neto        = sum(_signo_v(r) * (r["valor_neto"] or 0) for r in ventas_rows)
+        v_por_cobrar  = sum(_signo_v(r) * (r["valor_neto"] or 0) for r in ventas_rows if r["estado"] == "PENDIENTE")
+        v_vencido     = sum(_signo_v(r) * (r["valor_neto"] or 0) for r in ventas_rows if "VENCIDA" in str(r["estado"]).upper())
+        v_cobrado     = sum(_signo_v(r) * (r["valor_neto"] or 0) for r in ventas_rows if r["estado"] == "PAGADA")
         v_n_vencidas  = sum(1 for r in ventas_rows if "VENCIDA" in str(r["estado"]).upper())
         v_n_por_vencer= sum(1 for r in ventas_rows if r["estado"] == "POR_VENCER")
 
@@ -413,12 +414,13 @@ def resumen():
                         "cartera_vencida": 0, "n_vencidas": 0, "n_por_vencer": 0,
                         "total_gastos": 0, "por_pagar": 0})
     n_empresas  = len(empresa_ids)
-    ventas_rows = sb.table("facturas_venta").select("valor_neto,estado").in_("empresa_id", empresa_ids).execute().data
+    ventas_rows = sb.table("facturas_venta").select("valor_neto,estado,tipo_documento").in_("empresa_id", empresa_ids).execute().data
     gastos_rows = sb.table("facturas_gastos").select("valor_neto,estado").in_("empresa_id", empresa_ids).execute().data
 
-    v_neto        = sum(r["valor_neto"] or 0 for r in ventas_rows)
-    v_por_cobrar  = sum(r["valor_neto"] or 0 for r in ventas_rows if r["estado"] == "PENDIENTE")
-    v_vencido     = sum(r["valor_neto"] or 0 for r in ventas_rows if "VENCIDA" in str(r["estado"]).upper())
+    def _sv(r): return -1 if r.get("tipo_documento") == "nota_credito" else 1
+    v_neto        = sum(_sv(r) * (r["valor_neto"] or 0) for r in ventas_rows)
+    v_por_cobrar  = sum(_sv(r) * (r["valor_neto"] or 0) for r in ventas_rows if r["estado"] == "PENDIENTE")
+    v_vencido     = sum(_sv(r) * (r["valor_neto"] or 0) for r in ventas_rows if "VENCIDA" in str(r["estado"]).upper())
     v_n_vencidas  = sum(1 for r in ventas_rows if "VENCIDA" in str(r["estado"]).upper())
     v_n_por_vencer= sum(1 for r in ventas_rows if r["estado"] == "POR_VENCER")
 
@@ -450,23 +452,24 @@ def empresa_dashboard(eid):
         return jsonify({"error": "Empresa no encontrada"}), 404
     e = e_rows[0]
 
-    ventas_rows = sb.table("facturas_venta").select("valor_neto,estado,retefuente,reteiva,reteica").eq("empresa_id", eid).execute().data
+    ventas_rows = sb.table("facturas_venta").select("valor_neto,estado,retefuente,reteiva,reteica,tipo_documento").eq("empresa_id", eid).execute().data
     gastos_rows = sb.table("facturas_gastos").select("valor_neto,estado,retefuente,reteiva,reteica").eq("empresa_id", eid).execute().data
 
+    def _sd(r): return -1 if r.get("tipo_documento") == "nota_credito" else 1
     v_n         = len(ventas_rows)
-    v_neto      = sum(r["valor_neto"] or 0 for r in ventas_rows)
-    v_por_cobrar= sum(r["valor_neto"] or 0 for r in ventas_rows if r["estado"] == "PENDIENTE")
-    v_vencido   = sum(r["valor_neto"] or 0 for r in ventas_rows if "VENCIDA" in str(r["estado"]).upper())
-    v_cobrado   = sum(r["valor_neto"] or 0 for r in ventas_rows if r["estado"] == "PAGADA")
+    v_neto      = sum(_sd(r) * (r["valor_neto"] or 0) for r in ventas_rows)
+    v_por_cobrar= sum(_sd(r) * (r["valor_neto"] or 0) for r in ventas_rows if r["estado"] == "PENDIENTE")
+    v_vencido   = sum(_sd(r) * (r["valor_neto"] or 0) for r in ventas_rows if "VENCIDA" in str(r["estado"]).upper())
+    v_cobrado   = sum(_sd(r) * (r["valor_neto"] or 0) for r in ventas_rows if r["estado"] == "PAGADA")
 
     g_n         = len(gastos_rows)
     g_neto      = sum(r["valor_neto"] or 0 for r in gastos_rows)
     g_por_pagar = sum(r["valor_neto"] or 0 for r in gastos_rows if r["estado"] == "PENDIENTE")
     g_pagado    = sum(r["valor_neto"] or 0 for r in gastos_rows if r["estado"] == "PAGADA")
 
-    ret_v_rf = sum(r["retefuente"] or 0 for r in ventas_rows)
-    ret_v_ri = sum(r["reteiva"]    or 0 for r in ventas_rows)
-    ret_v_rc = sum(r["reteica"]    or 0 for r in ventas_rows)
+    ret_v_rf = sum(_sd(r) * (r["retefuente"] or 0) for r in ventas_rows)
+    ret_v_ri = sum(_sd(r) * (r["reteiva"]    or 0) for r in ventas_rows)
+    ret_v_rc = sum(_sd(r) * (r["reteica"]    or 0) for r in ventas_rows)
 
     ret_g_rf = sum(r["retefuente"] or 0 for r in gastos_rows)
     ret_g_ri = sum(r["reteiva"]    or 0 for r in gastos_rows)
@@ -714,12 +717,12 @@ def retenciones_por_cliente(eid):
     if err: return err
     rows = (
         sb.table("facturas_venta")
-        .select("cliente_nit,cliente_nombre,cliente_ciudad,retefuente,reteiva,reteica,valor_neto")
+        .select("cliente_nit,cliente_nombre,cliente_ciudad,retefuente,reteiva,reteica,valor_neto,tipo_documento")
         .eq("empresa_id", eid)
         .execute().data
     )
 
-    # GROUP BY cliente_nit in Python
+    # GROUP BY cliente_nit — Notas Crédito restan (anulan o reducen la factura original)
     grupos = {}
     for r in rows:
         key = r["cliente_nit"]
@@ -734,11 +737,12 @@ def retenciones_por_cliente(eid):
                 "valor_neto":      0,
             }
         g = grupos[key]
+        signo = -1 if r.get("tipo_documento") == "nota_credito" else 1
         g["n_facturas"] += 1
-        g["retefuente"] += r["retefuente"] or 0
-        g["reteiva"]    += r["reteiva"]    or 0
-        g["reteica"]    += r["reteica"]    or 0
-        g["valor_neto"] += r["valor_neto"] or 0
+        g["retefuente"] += signo * (r["retefuente"] or 0)
+        g["reteiva"]    += signo * (r["reteiva"]    or 0)
+        g["reteica"]    += signo * (r["reteica"]    or 0)
+        g["valor_neto"] += signo * (r["valor_neto"] or 0)
 
     result = []
     for g in grupos.values():
