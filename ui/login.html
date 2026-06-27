@@ -9,38 +9,35 @@
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Inter',sans-serif;background:#0f172a;color:#f1f5f9;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;}
-
     .bg-glow{position:fixed;top:-200px;left:50%;transform:translateX(-50%);width:800px;height:500px;background:radial-gradient(ellipse,rgba(59,130,246,.12) 0%,transparent 70%);pointer-events:none;}
-
-    .login-card{background:#1e293b;border:1px solid #334155;border-radius:20px;padding:2.5rem;width:100%;max-width:400px;position:relative;}
-
+    .login-card{background:#1e293b;border:1px solid #334155;border-radius:20px;padding:2.5rem;width:100%;max-width:420px;position:relative;}
     .login-logo{display:flex;align-items:center;gap:.85rem;margin-bottom:2rem;justify-content:center;}
     .login-logo-icon{width:46px;height:46px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:white;flex-shrink:0;}
-    .login-logo-text{text-align:left;}
     .login-logo-title{font-size:16px;font-weight:800;line-height:1.2;}
     .login-logo-sub{font-size:11px;color:#64748b;}
-
-    .login-title{font-size:22px;font-weight:800;text-align:center;margin-bottom:.4rem;}
-    .login-sub{font-size:13px;color:#64748b;text-align:center;margin-bottom:2rem;}
-
-    .form-group{margin-bottom:1.1rem;}
-    .form-label{display:block;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.07em;margin-bottom:.45rem;}
-    .form-input{width:100%;background:#0f172a;border:1px solid #334155;border-radius:10px;padding:.75rem 1rem;font-size:14px;font-family:inherit;color:#f1f5f9;outline:none;transition:border-color .15s;}
+    .tabs{display:flex;gap:0;background:#0f172a;border-radius:10px;padding:3px;margin-bottom:1.75rem;}
+    .tab-btn{flex:1;padding:.55rem;font-size:13px;font-weight:600;font-family:inherit;border:none;border-radius:8px;cursor:pointer;transition:all .15s;background:transparent;color:#64748b;}
+    .tab-btn.active{background:#1e293b;color:#f1f5f9;box-shadow:0 1px 4px rgba(0,0,0,.3);}
+    .tab-content{display:none;}
+    .tab-content.active{display:block;}
+    .form-group{margin-bottom:1rem;}
+    .form-label{display:block;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.07em;margin-bottom:.4rem;}
+    .form-input{width:100%;background:#0f172a;border:1px solid #334155;border-radius:10px;padding:.72rem 1rem;font-size:14px;font-family:inherit;color:#f1f5f9;outline:none;transition:border-color .15s;}
     .form-input:focus{border-color:#3b82f6;}
+    .form-input:focus-visible{outline:2px solid #3b82f6;outline-offset:2px;}
     .form-input::placeholder{color:#475569;}
-
-    .login-btn{width:100%;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border:none;border-radius:10px;padding:.85rem;font-size:15px;font-weight:700;font-family:inherit;color:white;cursor:pointer;margin-top:.5rem;transition:opacity .15s,transform .15s;}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;}
+    .login-btn{width:100%;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border:none;border-radius:10px;padding:.85rem;font-size:15px;font-weight:700;font-family:inherit;color:white;cursor:pointer;margin-top:.25rem;transition:opacity .15s,transform .15s;}
     .login-btn:hover{opacity:.92;transform:translateY(-1px);}
     .login-btn:active{transform:none;}
-
-    .login-error{display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:.65rem 1rem;font-size:13px;color:#ef4444;text-align:center;margin-top:.75rem;}
-
-    .login-badge{display:flex;align-items:center;gap:.5rem;justify-content:center;margin-top:1.75rem;padding-top:1.5rem;border-top:1px solid #1e293b;}
+    .login-btn:focus-visible{outline:2px solid #3b82f6;outline-offset:2px;}
+    .msg{display:none;border-radius:8px;padding:.65rem 1rem;font-size:13px;text-align:center;margin-top:.75rem;}
+    .msg.error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#ef4444;}
+    .msg.success{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);color:#10b981;}
+    .login-badge{display:flex;align-items:center;gap:.5rem;justify-content:center;margin-top:1.75rem;padding-top:1.5rem;border-top:1px solid #0f172a;}
     .login-badge-dot{width:7px;height:7px;background:#10b981;border-radius:50%;}
     .login-badge-text{font-size:11px;color:#475569;}
-
-    .demo-hint{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:.65rem 1rem;font-size:12px;color:#64748b;text-align:center;margin-bottom:1.25rem;line-height:1.5;}
-    .demo-hint b{color:#93c5fd;}
+    .optional{color:#475569;font-weight:400;text-transform:none;font-size:11px;}
   </style>
 </head>
 <body>
@@ -48,30 +45,68 @@
 
 <div class="login-card">
   <div class="login-logo">
-    <div class="login-logo-icon">CA</div>
-    <div class="login-logo-text">
+    <div class="login-logo-icon">CB</div>
+    <div>
       <div class="login-logo-title">ContaBot</div>
-      <div class="login-logo-sub">Estudio Contable Aristizábal & Asociados</div>
+      <div class="login-logo-sub">Automatización contable colombiana</div>
     </div>
   </div>
 
-  <h2 class="login-title">Bienvenido</h2>
-  <p class="login-sub">Ingrese sus credenciales para acceder al sistema</p>
+  <div class="tabs" role="tablist">
+    <button class="tab-btn active" role="tab" aria-selected="true" onclick="showTab('login',this)">Iniciar sesión</button>
+    <button class="tab-btn" role="tab" aria-selected="false" onclick="showTab('registro',this)">Crear cuenta</button>
+  </div>
 
-  <div class="demo-hint">Acceso demo: <b>contador</b> / <b>contabot2026</b></div>
+  <!-- LOGIN -->
+  <div id="tab-login" class="tab-content active" role="tabpanel">
+    <form onsubmit="doLogin(event)" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="l-email">Email</label>
+        <input class="form-input" type="email" id="l-email" placeholder="contador@estudio.com" autocomplete="email" required/>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="l-pass">Contraseña</label>
+        <input class="form-input" type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" required/>
+      </div>
+      <button class="login-btn" type="submit" id="login-btn">Ingresar</button>
+      <div class="msg error" id="login-error"></div>
+    </form>
+  </div>
 
-  <form onsubmit="doLogin(event)">
-    <div class="form-group">
-      <label class="form-label">Usuario</label>
-      <input class="form-input" type="text" id="usuario" placeholder="Su usuario" autocomplete="username"/>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Contraseña</label>
-      <input class="form-input" type="password" id="password" placeholder="••••••••" autocomplete="current-password"/>
-    </div>
-    <button class="login-btn" type="submit" id="login-btn">Ingresar al sistema</button>
-    <div class="login-error" id="login-error">Usuario o contraseña incorrectos</div>
-  </form>
+  <!-- REGISTRO -->
+  <div id="tab-registro" class="tab-content" role="tabpanel">
+    <form onsubmit="doRegistro(event)" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="r-nombre">Nombre completo</label>
+        <input class="form-input" type="text" id="r-nombre" placeholder="Carlos Eduardo Ramírez" autocomplete="name" required/>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="r-estudio">Nombre del estudio <span class="optional">(opcional)</span></label>
+        <input class="form-input" type="text" id="r-estudio" placeholder="Estudio Contable Ramírez & Asociados"/>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="r-tp">T.P. <span class="optional">(opcional)</span></label>
+          <input class="form-input" type="text" id="r-tp" placeholder="124567-T"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="r-tel">Teléfono <span class="optional">(opcional)</span></label>
+          <input class="form-input" type="tel" id="r-tel" placeholder="315-890-4321"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="r-email">Email</label>
+        <input class="form-input" type="email" id="r-email" placeholder="contador@estudio.com" autocomplete="email" required/>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="r-pass">Contraseña <span class="optional">(mín. 8 caracteres)</span></label>
+        <input class="form-input" type="password" id="r-pass" placeholder="••••••••" autocomplete="new-password" required minlength="8"/>
+      </div>
+      <button class="login-btn" type="submit" id="registro-btn">Crear mi cuenta</button>
+      <div class="msg error" id="registro-error"></div>
+      <div class="msg success" id="registro-ok"></div>
+    </form>
+  </div>
 
   <div class="login-badge">
     <div class="login-badge-dot"></div>
@@ -80,37 +115,83 @@
 </div>
 
 <script>
+function showTab(tab, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
+  document.getElementById('tab-' + tab).classList.add('active');
+  btn.classList.add('active');
+  btn.setAttribute('aria-selected','true');
+}
+
 async function doLogin(e) {
   e.preventDefault();
-  const u   = document.getElementById('usuario').value.trim();
-  const p   = document.getElementById('password').value.trim();
-  const btn = document.getElementById('login-btn');
-  const err = document.getElementById('login-error');
-
+  const email = document.getElementById('l-email').value.trim();
+  const pass  = document.getElementById('l-pass').value;
+  const btn   = document.getElementById('login-btn');
+  const err   = document.getElementById('login-error');
+  err.style.display = 'none';
   btn.textContent = 'Verificando...';
   btn.disabled = true;
-  err.style.display = 'none';
-
   try {
     const res  = await fetch('/api/login', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({usuario: u, password: p})
+      body: JSON.stringify({email, password: pass})
     });
     const data = await res.json();
     if (data.ok) {
-      btn.textContent = 'Acceso concedido ✓';
-      setTimeout(() => { window.location.href = '/'; }, 500);
+      btn.textContent = 'Bienvenido ' + (data.nombre || '') + ' ✓';
+      setTimeout(() => { window.location.href = '/'; }, 600);
     } else {
-      err.textContent = data.error || 'Usuario o contraseña incorrectos';
+      err.textContent = data.error || 'Credenciales inválidas';
       err.style.display = 'block';
-      btn.textContent = 'Ingresar al sistema';
+      btn.textContent = 'Ingresar';
       btn.disabled = false;
     }
   } catch {
     err.textContent = 'Error de conexión. Intente de nuevo.';
     err.style.display = 'block';
-    btn.textContent = 'Ingresar al sistema';
+    btn.textContent = 'Ingresar';
+    btn.disabled = false;
+  }
+}
+
+async function doRegistro(e) {
+  e.preventDefault();
+  const nombre  = document.getElementById('r-nombre').value.trim();
+  const estudio = document.getElementById('r-estudio').value.trim();
+  const tp      = document.getElementById('r-tp').value.trim();
+  const tel     = document.getElementById('r-tel').value.trim();
+  const email   = document.getElementById('r-email').value.trim();
+  const pass    = document.getElementById('r-pass').value;
+  const btn     = document.getElementById('registro-btn');
+  const err     = document.getElementById('registro-error');
+  const ok      = document.getElementById('registro-ok');
+  err.style.display = 'none';
+  ok.style.display  = 'none';
+  btn.textContent = 'Creando cuenta...';
+  btn.disabled = true;
+  try {
+    const res  = await fetch('/api/registro', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({nombre, estudio_nombre: estudio, tp_numero: tp, telefono: tel, email, password: pass})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      ok.textContent = '¡Cuenta creada! Redirigiendo...';
+      ok.style.display = 'block';
+      setTimeout(() => { window.location.href = '/'; }, 800);
+    } else {
+      err.textContent = data.error || 'Error al crear la cuenta';
+      err.style.display = 'block';
+      btn.textContent = 'Crear mi cuenta';
+      btn.disabled = false;
+    }
+  } catch {
+    err.textContent = 'Error de conexión. Intente de nuevo.';
+    err.style.display = 'block';
+    btn.textContent = 'Crear mi cuenta';
     btn.disabled = false;
   }
 }
