@@ -1106,7 +1106,8 @@ async function cargarPendientes() {
   const fmt = v => v ? `$${Math.round(v).toLocaleString('es-CO')}` : '$0';
 
   lista.innerHTML = pendientes.map(p => {
-    const d = p.factura_data || {};
+    const d_raw = p.factura_data;
+    const d = (d_raw && typeof d_raw === 'string' ? JSON.parse(d_raw) : d_raw) || {};
     const opts = empresas.map(e => `<option value="${e.id}">${e.razon_social}</option>`).join('');
     return `
     <div class="pend-card" id="pend-${p.id}" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1rem">
@@ -1121,6 +1122,7 @@ async function cargarPendientes() {
             NIT receptor leído: <code style="background:#1e293b;padding:1px 6px;border-radius:4px">${esc(d.receptor_nit || 'no detectado')}</code>
             &nbsp;·&nbsp; Nombre: ${esc(d.receptor_nombre || '—')}
           </div>
+          ${(d._email_origen || p.email_origen) ? `<div style="font-size:12px;color:#94a3b8;margin-top:2px">📧 Encontrado en: <b>${esc(d._email_origen || p.email_origen)}</b></div>` : ''}
         </div>
         <div style="text-align:right">
           <div style="font-size:20px;font-weight:700;color:var(--green)">${fmt(d.total_factura)}</div>

@@ -68,7 +68,7 @@ TIPOS_NOTA         = {"91", "92"}         # nota crédito / débito (registrar d
 # Regex del patrón de asunto de factura electrónica colombiana:
 # NIT;NOMBRE EMPRESA;NUMERO DOC;TIPO;NOMBRE EMPRESA
 PATRON_ASUNTO_DIAN = re.compile(
-    r"(\d{7,10});([^;]+);(\w+);(0[124]|91|92);",
+    r"(\d{7,10})\s*;\s*([^;]+?)\s*;\s*(\w+)\s*;\s*(0[124]|91|92)\s*;",
     re.IGNORECASE
 )
 
@@ -195,6 +195,10 @@ def puntaje_es_factura(asunto, nombre_adjunto, remitente):
     fname = (nombre_adjunto or "").lower()
     score = 0
     if re.match(r"\d{7,10}_\w+\.(xml|pdf)$", fname):  # NIT_NUMERO.xml
+        score += 60
+    if re.match(r"z\d{9,12}", fname):  # DIAN ZIP: z{NIT}{consecutivo}.zip
+        score += 60
+    if re.match(r"ad\d{9,12}", fname):  # DIAN adjunto ZIP: ad{NIT}...zip
         score += 60
     if fname.startswith(("fe_", "fev_", "setp", "fact")):
         score += 40
@@ -404,6 +408,17 @@ def procesar_mensaje(service, msg, empresa_id):
     remitente = re.search(r"[\w\.\-]+@[\w\.\-]+", headers.get("From", ""))
     remitente = remitente.group(0).lower() if remitente else ""
 
+    _sb = get_sb()
+    _emp_row = _sb.table("empresas_clientes").select("contador_id").eq("id", empresa_id).execute().data
+    _contador_id = _emp_row[0]["contador_id"] if _emp_row else None
+    # Email de la cuenta Gmail escaneada (no el remitente del correo)
+    _tok_row = _sb.table("gmail_tokens").select("email").eq("empresa_id", empresa_id).eq("activo", True).execute().data
+    _gmail_cuenta = _tok_row[0]["email"] if _tok_row else ""
+
+    # Prioridad del resultado a reportar: nuevas > duplicadas > pendientes > errores > ignoradas
+    _PRIO = {"nuevas": 5, "duplicadas": 4, "pendientes": 3, "errores": 2, "ignoradas": 1}
+    mejor = "ignoradas"
+
     for part in msg["payload"].get("parts", []):
         fname  = part.get("filename", "")
         att_id = part.get("body", {}).get("attachmentId")
@@ -412,14 +427,16 @@ def procesar_mensaje(service, msg, empresa_id):
 
         es_factura, confianza, info = puntaje_es_factura(asunto, fname, remitente)
         if not es_factura:
-            logging.debug("[ignorado %dpts] %s", confianza, asunto[:60])
+            logging.debug("[ignorado %dpts] %s | %s", confianza, asunto[:60], fname)
             continue
-        logging.info("[factura %dpts] %s", confianza, asunto[:60])
+        logging.info("[factura %dpts] %s | %s", confianza, asunto[:60], fname)
 
         try:
             archivos = _descargar_adjunto(service, msg["id"], att_id, fname, ADJUNTOS_DIR / str(empresa_id))
         except Exception:
             logging.exception("Error descargando %s", fname)
+            if _PRIO["errores"] > _PRIO[mejor]:
+                mejor = "errores"
             continue
         if not archivos:
             continue
@@ -429,14 +446,16 @@ def procesar_mensaje(service, msg, empresa_id):
             continue
         datos = _enriquecer_datos(datos, info)
 
-        _sb = get_sb()
         empresa = detectar_o_crear_empresa(datos, _sb)
         if not empresa:
             logging.warning("Empresa no encontrada (NIT %s) — avisando por Telegram", datos.get("receptor_nit", "?"))
-            pendiente_id = guardar_empresa_pendiente(datos, fuente="gmail", sb=_sb)
+            datos["_email_origen"] = _gmail_cuenta  # cuenta Gmail donde llegó la factura
+            pendiente_id = guardar_empresa_pendiente(datos, fuente="gmail", sb=_sb, contador_id=_contador_id)
             empresas_all = _sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
             notificar_empresa_desconocida(datos, fuente="gmail", pendiente_id=pendiente_id, empresas=empresas_all)
-            return "ignoradas"
+            if _PRIO["pendientes"] > _PRIO[mejor]:
+                mejor = "pendientes"
+            continue  # seguir con otros adjuntos del mismo correo
 
         resultado = registrar_en_db(datos, empresa["id"], empresa["nit"], str(file_usado))
         if resultado == "nuevas" and remitente:
@@ -446,9 +465,10 @@ def procesar_mensaje(service, msg, empresa_id):
             notificar_factura(datos, empresa["razon_social"], tipo=flujo, fuente="gmail")
         else:
             logging.info("Duplicada: %s", datos.get("numero"))
-        return resultado
+        if _PRIO.get(resultado, 0) > _PRIO[mejor]:
+            mejor = resultado
 
-    return "ignoradas"
+    return mejor
 
 
 

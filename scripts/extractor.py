@@ -504,8 +504,20 @@ def guardar_empresa_pendiente(datos: dict, fuente: str, sb, contador_id=None) ->
         import json as _json
         factura_json = {k: (float(v) if isinstance(v, (int, float)) else v)
                         for k, v in (datos or {}).items()}
+        nit = datos.get("receptor_nit", "")
+        numero = datos.get("numero", "")
+        # Evitar duplicados: si ya existe el mismo NIT + numero, actualizar _email_origen si faltaba
+        if nit and numero:
+            existe = sb.table("empresas_pendientes").select("id,factura_data").eq("nit", nit).contains("factura_data", {"numero": numero}).execute().data
+            if existe:
+                existing_id = existe[0]["id"]
+                existing_fd = existe[0].get("factura_data") or {}
+                if factura_json.get("_email_origen") and not existing_fd.get("_email_origen"):
+                    updated_fd = {**existing_fd, "_email_origen": factura_json["_email_origen"]}
+                    sb.table("empresas_pendientes").update({"factura_data": updated_fd}).eq("id", existing_id).execute()
+                return existing_id
         row = {
-            "nit":          datos.get("receptor_nit", ""),
+            "nit":          nit,
             "razon_social": datos.get("receptor_nombre", ""),
             "ciudad":       datos.get("receptor_ciudad", ""),
             "factura_data": factura_json,
