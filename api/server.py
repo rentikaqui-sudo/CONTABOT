@@ -1392,7 +1392,7 @@ def declaraciones_empresa(eid):
         return jsonify({"error": "Empresa no encontrada"}), 404
     e = e_rows[0]
 
-    ventas = sb.table("facturas_venta").select("fecha,subtotal,iva,retefuente,reteiva,reteica,total_factura,valor_neto").eq("empresa_id", eid).execute().data
+    ventas = sb.table("facturas_venta").select("fecha,subtotal,iva,retefuente,reteiva,reteica,total_factura,valor_neto,tipo_documento").eq("empresa_id", eid).execute().data
     gastos = sb.table("facturas_gastos").select("fecha,subtotal,iva,retefuente,reteiva,reteica,total_factura,valor_neto").eq("empresa_id", eid).execute().data
 
     def mes(r):
@@ -1409,19 +1409,22 @@ def declaraciones_empresa(eid):
         m = mes(r)
         return (m + 1) // 2 if m > 0 else 0
 
+    # NC resta de la base (signo -1), factura normal suma (signo +1)
+    def signo(r): return -1 if r.get("tipo_documento") == "nota_credito" else 1
+
     # IVA F-300 por cuatrimestre
     f300 = []
     labels_c = {1: "Ene–Abr", 2: "May–Ago", 3: "Sep–Dic"}
     for c in [1, 2, 3]:
         vv = [r for r in ventas if cuatrimestre(r) == c]
         gg = [r for r in gastos if cuatrimestre(r) == c]
-        iva_gen  = round(sum(r["iva"] or 0 for r in vv))
+        iva_gen  = round(sum(signo(r) * (r["iva"] or 0) for r in vv))
         iva_desc = round(sum(r["iva"] or 0 for r in gg))
         iva_pagar = max(0, iva_gen - iva_desc)
         f300.append({
             "cuatrimestre": c,
             "periodo":      labels_c[c],
-            "base_ventas":  round(sum(r["subtotal"] or 0 for r in vv)),
+            "base_ventas":  round(sum(signo(r) * (r["subtotal"] or 0) for r in vv)),
             "iva_generado": iva_gen,
             "iva_descontable": iva_desc,
             "iva_a_pagar":  iva_pagar,
@@ -1450,7 +1453,7 @@ def declaraciones_empresa(eid):
     ica = []
     for b in range(1, 7):
         vv = [r for r in ventas if bimestre(r) == b]
-        base = round(sum(r["subtotal"] or 0 for r in vv))
+        base = round(sum(signo(r) * (r["subtotal"] or 0) for r in vv))
         ica.append({
             "bimestre":   b,
             "periodo":    labels_b[b],
