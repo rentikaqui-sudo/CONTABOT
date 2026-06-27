@@ -445,7 +445,7 @@ def resumen():
     if not empresa_ids:
         return jsonify({"n_empresas": 0, "total_ventas": 0, "por_cobrar": 0,
                         "cartera_vencida": 0, "n_vencidas": 0, "n_por_vencer": 0,
-                        "total_gastos": 0, "por_pagar": 0})
+                        "total_gastos": 0, "por_pagar": 0, "total_facturas": 0})
     n_empresas  = len(empresa_ids)
     ventas_rows = sb.table("facturas_venta").select("valor_neto,estado,tipo_documento").in_("empresa_id", empresa_ids).execute().data
     gastos_rows = sb.table("facturas_gastos").select("valor_neto,estado").in_("empresa_id", empresa_ids).execute().data
@@ -599,16 +599,29 @@ def empresa_gastos(eid):
 @app.route("/api/factura/archivo")
 @login_required
 def factura_archivo():
+    import re as _re
     path = request.args.get("path", "")
     if not path:
         return "No path", 400
     if path.startswith("http"):
+        # Supabase Storage: .../facturas/{empresa_id}/...
+        m = _re.search(r'/facturas/(\d+)/', path)
+        if m:
+            err = validate_empresa_ownership(int(m.group(1)))
+            if err: return err
         return redirect(path)
     from flask import send_file
     allowed   = Path(FACTURAS_DIR).resolve()
     requested = Path(BASE_DIR, path).resolve()
     if not str(requested).startswith(str(allowed)):
         return "Acceso denegado", 403
+    # Verificar que la empresa del path pertenece al contador en sesión
+    try:
+        eid = int(requested.relative_to(allowed).parts[0])
+        err = validate_empresa_ownership(eid)
+        if err: return err
+    except (ValueError, IndexError):
+        pass
     if requested.exists():
         return send_file(requested)
     return "Archivo no encontrado", 404
