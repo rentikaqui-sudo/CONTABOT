@@ -304,6 +304,12 @@ def guardar_factura(datos: dict, empresa_id: int, empresa_nit: str,
     if ya.data:
         return flujo, "duplicada"
 
+    tipo_doc = datos.get("tipo_documento", "factura")
+    if tipo_doc == "nota_credito":
+        estado = "POR_DEVOLVER" if flujo == "venta" else "POR_RECIBIR"
+    else:
+        estado = "PENDIENTE"
+
     row = {
         "empresa_id":     empresa_id,
         "numero":         numero,
@@ -313,10 +319,10 @@ def guardar_factura(datos: dict, empresa_id: int, empresa_nit: str,
         "iva":            float(datos.get("iva") or 0),
         "total_factura":  float(datos.get("total_factura") or 0),
         "valor_neto":     float(datos.get("valor_neto") or datos.get("total_factura") or 0),
-        "estado":         "PENDIENTE",
+        "estado":         estado,
         "archivo_pdf":    archivo,
         "fuente":         fuente,
-        "tipo_documento": datos.get("tipo_documento", "factura"),
+        "tipo_documento": tipo_doc,
         "tipo_dian":      datos.get("tipo_dian", "01"),
         "referencia_nc":  datos.get("referencia_nc"),
     }

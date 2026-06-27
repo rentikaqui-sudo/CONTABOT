@@ -1,8 +1,30 @@
-/* ContaBot — Estudio Contable Aristizábal — Lógica multi-empresa */
+/* ContaBot — Lógica multi-contador */
 
 const COP  = v => '$' + Math.round(v).toLocaleString('es-CO');
 const MCOP = v => (v / 1_000_000).toFixed(2) + 'M';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ── Utilidades de seguridad y UX ─────────────────────────────────────────────
+
+/** Escapa texto para insertar en innerHTML de forma segura (evita XSS). */
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s ?? '');
+  return d.innerHTML;
+}
+
+/** Muestra una notificación toast en la esquina inferior derecha. */
+function showToast(msg, tipo = 'info') {
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + tipo;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add('toast-show'), 10);
+  setTimeout(() => {
+    t.classList.remove('toast-show');
+    setTimeout(() => t.remove(), 300);
+  }, 4000);
+}
 
 // Redirige al login si la sesión expira (401)
 const _origFetch = window.fetch;
@@ -14,6 +36,83 @@ window.fetch = async (...args) => {
 
 let empresasData   = [];
 let empresaActual  = null;
+
+// ── Borrar empresa / factura ──────────────────────────────────────────────────
+
+function cerrarConfirmar() {
+  document.getElementById('modal-confirmar').style.display = 'none';
+}
+
+function abrirConfirmar(titulo, mensaje, onOk) {
+  document.getElementById('conf-titulo').textContent = titulo;
+  document.getElementById('conf-mensaje').textContent = mensaje;
+  const btn = document.getElementById('conf-btn-ok');
+  btn.onclick = async () => { cerrarConfirmar(); await onOk(); };
+  document.getElementById('modal-confirmar').style.display = 'flex';
+}
+
+async function confirmarBorrarEmpresa(eid) {
+  const empresa = (empresasData || []).find(e => e.id === eid);
+  const nombre = empresa ? empresa.razon_social : `empresa #${eid}`;
+  abrirConfirmar(
+    `Eliminar "${nombre}"`,
+    `Esta acción eliminará la empresa y TODAS sus facturas de forma permanente. Los archivos en la nube también se borrarán. No se puede deshacer.`,
+    async () => {
+      const res = await fetch(`/api/empresa/${eid}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.ok) {
+        await loadInicio();
+      } else {
+        showToast('Error al eliminar: ' + data.error, 'error');
+      }
+    }
+  );
+}
+
+async function confirmarBorrarFactura(tipo, numero, eid, btn) {
+  abrirConfirmar(
+    `Eliminar factura ${numero}`,
+    `Se eliminará la factura y su archivo adjunto permanentemente. Esta acción no se puede deshacer.`,
+    async () => {
+      const res = await fetch(`/api/factura/${tipo}/${encodeURIComponent(numero)}/empresa/${eid}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.ok) {
+        const row = btn.closest('tr');
+        if (row) row.remove();
+      } else {
+        showToast('Error al eliminar: ' + data.error, 'error');
+      }
+    }
+  );
+}
+
+// ── Onboarding ────────────────────────────────────────────────────────────────
+
+function abrirOnboarding() {
+  actualizarChecklistOnboarding();
+  document.getElementById('onboarding-overlay').classList.add('active');
+}
+
+function cerrarOnboarding() {
+  document.getElementById('onboarding-overlay').classList.remove('active');
+  localStorage.setItem('ob_visto', '1');
+}
+
+function actualizarChecklistOnboarding() {
+  // Paso 1: al menos una empresa
+  const tieneEmpresas = empresasData.length > 0;
+  document.getElementById('ob-step-1').classList.toggle('done', tieneEmpresas);
+  // Pasos 2-5: se marcan manualmente via localStorage
+  [2, 3, 4, 5].forEach(n => {
+    const hecho = localStorage.getItem(`ob_paso_${n}`) === '1';
+    document.getElementById(`ob-step-${n}`).classList.toggle('done', hecho);
+  });
+}
+
+function marcarPasoOnboarding(n) {
+  localStorage.setItem(`ob_paso_${n}`, '1');
+  actualizarChecklistOnboarding();
+}
 
 const CATS = {
   insumos:'Insumos', transporte:'Transporte', servicios:'Servicios',
@@ -56,10 +155,19 @@ function subtabTo(id, btn) {
 // ── INICIO: Mis clientes ──────────────────────────────────────────────────────
 
 async function loadInicio() {
-  const [resumen, empresas] = await Promise.all([
-    fetch('/api/resumen').then(r => r.json()),
-    fetch('/api/empresas').then(r => r.json()),
-  ]);
+  // Skeleton mientras cargan los datos
+  const kpiEl = document.getElementById('kpi-consolidado');
+  if (kpiEl) kpiEl.innerHTML = '<div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div>';
+  let resumen, empresas;
+  try {
+    [resumen, empresas] = await Promise.all([
+      fetch('/api/resumen').then(r => r.json()),
+      fetch('/api/empresas').then(r => r.json()),
+    ]);
+  } catch(e) {
+    if (kpiEl) kpiEl.innerHTML = '<div class="error-state">No se pudo conectar con el servidor. Verifique que esté en ejecución.</div>';
+    return;
+  }
   empresasData = empresas;
 
   // KPIs consolidados
@@ -104,14 +212,14 @@ async function loadInicio() {
       <style>.empresa-card:nth-child(${i+1})::before{background:${e.color}}</style>
       <div class="empresa-card-top">
         <div class="empresa-info-header">
-          <span class="empresa-icono">${e.icono}</span>
+          <span class="empresa-icono">${esc(e.icono)}</span>
           <div>
-            <div class="empresa-nombre">${e.razon_social}</div>
-            <div class="empresa-sector">${e.sector}</div>
-            <div class="empresa-ciudad">${e.ciudad}</div>
+            <div class="empresa-nombre">${esc(e.razon_social)}</div>
+            <div class="empresa-sector">${esc(e.sector)}</div>
+            <div class="empresa-ciudad">${esc(e.ciudad)}</div>
           </div>
         </div>
-        <div class="semaforo ${e.semaforo}" title="Estado: ${e.semaforo}"></div>
+        <div class="semaforo ${esc(e.semaforo)}" title="Estado: ${esc(e.semaforo)}"></div>
       </div>
 
       <div class="empresa-metrics">
@@ -134,11 +242,12 @@ async function loadInicio() {
       </div>
 
       <div class="empresa-alertas-bar ${alertaClass}">
-        <span>${alertaTexto}</span>
+        <span>${esc(alertaTexto)}</span>
       </div>
 
-      <div class="empresa-contacto">
-        NIT ${e.nit} · Contacto: ${e.contacto}
+      <div class="empresa-footer-row">
+        <span class="empresa-contacto">NIT ${esc(e.nit)} · ${esc(e.contacto)}</span>
+        <button class="btn-borrar-empresa" title="Eliminar empresa" onclick="event.stopPropagation();confirmarBorrarEmpresa(${e.id})">🗑</button>
       </div>
     `;
     card.onclick = () => abrirEmpresa(e);
@@ -222,12 +331,12 @@ function renderVentas(data) {
     const tr = document.createElement('tr');
     tr.id = `row-v-${f.numero.replace(/[^a-zA-Z0-9]/g,'_')}`;
     tr.style.animationDelay = `${i * 0.03}s`;
-    const pagada = f.estado === 'PAGADA';
+    const refLabel = f.referencia_nc ? `<span class="muted" style="font-size:10px"> → ${esc(f.referencia_nc)}</span>` : '';
     tr.innerHTML = `
-      <td><b>${f.numero}</b></td>
-      <td class="muted">${f.fecha}</td>
-      <td>${f.cliente_nombre}</td>
-      <td class="muted">${f.cliente_ciudad}</td>
+      <td><b>${esc(f.numero)}</b>${tipoBadge(f.tipo_documento)}${refLabel}</td>
+      <td class="muted">${esc(f.fecha)}</td>
+      <td>${esc(f.cliente_nombre)}</td>
+      <td class="muted">${esc(f.cliente_ciudad)}</td>
       <td>${COP(f.subtotal)}</td>
       <td style="color:var(--yellow)">${COP(f.iva)}</td>
       <td style="color:var(--red)">(${COP(f.retefuente)})</td>
@@ -236,7 +345,7 @@ function renderVentas(data) {
       <td><b>${COP(f.total_factura)}</b></td>
       <td style="color:var(--green)"><b>${COP(f.valor_neto)}</b></td>
       <td>${estadoBadge(f.estado)}</td>
-      <td>${pagada ? '' : `<button class="btn-pagar" onclick="marcarPagada('venta','${f.numero}',this)">✓ Pagada</button>`}</td>
+      <td>${accionBtn(f.estado, 'venta', f.numero)}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -318,12 +427,18 @@ async function loadGastosEmpresa(eid) {
     const tr = document.createElement('tr');
     tr.id = `row-g-${f.numero.replace(/[^a-zA-Z0-9]/g,'_')}`;
     tr.style.animationDelay = `${i * 0.04}s`;
-    const pagada = f.estado === 'PAGADA';
+    const cufeLink = f.cufe
+      ? `<a href="https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=${f.cufe}" target="_blank" rel="noopener" title="${f.cufe}" style="font-family:var(--mono);font-size:10px;color:var(--accent);text-decoration:none">${f.cufe.slice(0,14)}…</a>`
+      : '<span class="muted">—</span>';
+    const archivoLink = f.archivo_pdf
+      ? `<a href="/api/factura/archivo?path=${encodeURIComponent(f.archivo_pdf)}" target="_blank" title="Descargar archivo" style="color:var(--accent)">⬇</a>`
+      : '';
+    const refLabel = f.referencia_nc ? `<span class="muted" style="font-size:10px"> → ${esc(f.referencia_nc)}</span>` : '';
     tr.innerHTML = `
-      <td><b>${f.numero}</b></td>
-      <td class="muted">${f.fecha}</td>
-      <td>${f.proveedor_nombre}</td>
-      <td class="muted">${CATS[f.categoria] || f.categoria}</td>
+      <td><b>${esc(f.numero)}</b>${tipoBadge(f.tipo_documento)}${refLabel}</td>
+      <td class="muted">${esc(f.fecha)}</td>
+      <td>${esc(f.proveedor_nombre)}</td>
+      <td class="muted">${esc(CATS[f.categoria] || f.categoria)}</td>
       <td>${COP(f.subtotal)}</td>
       <td style="color:var(--yellow)">${COP(f.iva)}</td>
       <td style="color:var(--red)">(${COP(f.retefuente)})</td>
@@ -332,7 +447,11 @@ async function loadGastosEmpresa(eid) {
       <td><b>${COP(f.total_factura)}</b></td>
       <td style="color:var(--purple)"><b>${COP(f.valor_neto)}</b></td>
       <td>${estadoBadge(f.estado)}</td>
-      <td>${pagada ? '' : `<button class="btn-pagar" onclick="marcarPagada('gasto','${f.numero}',this)">✓ Pagada</button>`}</td>
+      <td>${cufeLink} ${archivoLink}</td>
+      <td style="display:flex;gap:.4rem;align-items:center">
+        ${accionBtn(f.estado, 'gasto', f.numero)}
+        <button class="btn-borrar-fila" title="Eliminar factura" onclick="confirmarBorrarFactura('gasto','${esc(f.numero)}',${empresaActual.id},this)">🗑</button>
+      </td>
     `;
     tbody.appendChild(tr);
   });
@@ -380,7 +499,7 @@ async function loadAlertasGlobal() {
     div.className = 'alerta-global-grupo';
     div.innerHTML = `
       <div class="alerta-global-empresa-title" style="background:${grupo.color}22;color:${grupo.color}">
-        ${grupo.nombre} — ${grupo.alertas.length} alertas
+        ${esc(grupo.nombre)} — ${grupo.alertas.length} alertas
       </div>
       <div class="alertas-grid" id="grid-${Math.random().toString(36).slice(2)}"></div>
     `;
@@ -390,10 +509,10 @@ async function loadAlertasGlobal() {
       const card = document.createElement('div');
       card.className = 'alerta-card' + (esVencida ? '' : ' por-vencer');
       card.innerHTML = `
-        <div class="alerta-cliente">${a.cliente_nombre}</div>
-        <div class="alerta-numero">Factura ${a.numero}</div>
+        <div class="alerta-cliente">${esc(a.cliente_nombre)}</div>
+        <div class="alerta-numero">Factura ${esc(a.numero)}</div>
         <div class="alerta-monto">${COP(a.valor_neto)} COP</div>
-        <div class="alerta-fecha">Vto: ${a.fecha_vencimiento} · <b>${a.estado}</b></div>
+        <div class="alerta-fecha">Vto: ${esc(a.fecha_vencimiento)} · <b>${esc(a.estado)}</b></div>
       `;
       grid.appendChild(card);
     });
@@ -466,8 +585,8 @@ async function loadRetencionesEmpresa(eid) {
           </tr></thead>
           <tbody>
             ${porCliente.map(c => `<tr>
-              <td><b>${c.cliente_nombre}</b></td>
-              <td class="muted">${c.cliente_ciudad}</td>
+              <td><b>${esc(c.cliente_nombre)}</b></td>
+              <td class="muted">${esc(c.cliente_ciudad)}</td>
               <td class="muted">${c.n_facturas}</td>
               <td style="color:var(--red)">(${COP(c.retefuente)})</td>
               <td style="color:var(--red)">(${COP(c.reteiva)})</td>
@@ -499,10 +618,10 @@ function renderAlertasCards(alertas, containerId, conEmail) {
     card.className = 'alerta-card' + (esVencida ? '' : ' por-vencer');
     card.style.animationDelay = `${i * 0.05}s`;
     card.innerHTML = `
-      <div class="alerta-cliente">${a.cliente_nombre}</div>
-      <div class="alerta-numero">Factura ${a.numero} · ${a.cliente_ciudad}</div>
+      <div class="alerta-cliente">${esc(a.cliente_nombre)}</div>
+      <div class="alerta-numero">Factura ${esc(a.numero)} · ${esc(a.cliente_ciudad)}</div>
       <div class="alerta-monto">${COP(a.valor_neto)} COP</div>
-      <div class="alerta-fecha">Vto: ${a.fecha_vencimiento} · <b>${a.estado}</b></div>
+      <div class="alerta-fecha">Vto: ${esc(a.fecha_vencimiento)} · <b>${esc(a.estado)}</b></div>
       ${conEmail ? '<div class="alerta-hint">Clic para ver email generado automáticamente</div>' : ''}
     `;
     if (conEmail && a.email_preview) {
@@ -523,12 +642,35 @@ function renderAlertasCards(alertas, containerId, conEmail) {
 // ── Estado badge ──────────────────────────────────────────────────────────────
 
 function estadoBadge(estado) {
-  const e = estado.toUpperCase();
-  if (e.includes('PAGADA'))     return `<span class="estado-badge estado-pagada">Pagada</span>`;
-  if (e.includes('PENDIENTE'))  return `<span class="estado-badge estado-pendiente">Pendiente</span>`;
-  if (e.includes('VENCIDA'))    return `<span class="estado-badge estado-vencida">${estado}</span>`;
-  if (e.includes('POR_VENCER')) return `<span class="estado-badge estado-por_vencer">Por vencer</span>`;
+  const e = (estado || '').toUpperCase();
+  if (e.includes('PAGADA'))       return `<span class="estado-badge estado-pagada">Pagada</span>`;
+  if (e.includes('PENDIENTE'))    return `<span class="estado-badge estado-pendiente">Pendiente</span>`;
+  if (e.includes('VENCIDA'))      return `<span class="estado-badge estado-vencida">${estado}</span>`;
+  if (e.includes('POR_VENCER'))   return `<span class="estado-badge estado-por_vencer">Por vencer</span>`;
+  if (e.includes('POR_DEVOLVER')) return `<span class="estado-badge estado-devolver">Por devolver</span>`;
+  if (e.includes('POR_RECIBIR'))  return `<span class="estado-badge estado-recibir">Por recibir</span>`;
   return `<span class="estado-badge">${estado}</span>`;
+}
+
+function tipoBadge(tipo) {
+  if (!tipo || tipo === 'factura') return '';
+  const map = {
+    nota_credito:    ['NC', 'tipo-nc'],
+    nota_debito:     ['ND', 'tipo-nd'],
+    doc_equivalente: ['DE', 'tipo-de'],
+    doc_soporte:     ['DS', 'tipo-ds'],
+    nota_ajuste_ds:  ['NA', 'tipo-na'],
+  };
+  const [label, cls] = map[tipo] || [tipo, ''];
+  return `<span class="tipo-badge ${cls}">${label}</span>`;
+}
+
+function accionBtn(estado, tabla, numero) {
+  const e = (estado || '').toUpperCase();
+  if (e.includes('PAGADA'))       return '';
+  if (e.includes('POR_DEVOLVER')) return `<button class="btn-pagar btn-devolver" onclick="marcarPagada('${tabla}','${esc(numero)}',this)">✓ Devuelta</button>`;
+  if (e.includes('POR_RECIBIR'))  return `<button class="btn-pagar btn-recibir"  onclick="marcarPagada('${tabla}','${esc(numero)}',this)">✓ Recibida</button>`;
+  return `<button class="btn-pagar" onclick="marcarPagada('${tabla}','${esc(numero)}',this)">✓ Pagada</button>`;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -543,6 +685,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (badge) { badge.textContent = res.pendientes.length; badge.style.display = 'inline'; }
     }
   }).catch(() => {});
+  // Mostrar onboarding la primera vez
+  if (!localStorage.getItem('ob_visto')) {
+    setTimeout(() => abrirOnboarding(), 800);
+  }
 });
 
 // ── LOGIN redirect ────────────────────────────────────────────────────────────
@@ -563,19 +709,16 @@ const RETENCIONES = {
   servicios_publicos:{retefuente:0.025, reteiva:0,    reteica:0,       label:'Servicios publicos (2.5%, sin ReteICA)' },
 };
 
-async function initFormManual() {
-  // Cargar empresas en el select
-  try {
-    const empresas = await fetch('/api/empresas').then(r => r.json());
-    const sel = document.getElementById('fm-empresa');
-    if (!sel) return;
-    empresas.forEach(e => {
-      const opt = document.createElement('option');
-      opt.value = e.id;
-      opt.textContent = e.razon_social;
-      sel.appendChild(opt);
-    });
-  } catch(e) {}
+function initFormManual() {
+  const sel = document.getElementById('fm-empresa');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Seleccionar empresa...</option>';
+  (empresasData || []).forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = e.razon_social;
+    sel.appendChild(opt);
+  });
 
   // Fecha por defecto: hoy
   const hoy = new Date().toISOString().split('T')[0];
@@ -693,7 +836,7 @@ async function submitFacturaManual(e) {
          Neto: <b>${COP(neto)}</b> COP · Retenciones calculadas automaticamente.`;
     }
   } catch(err) {
-    alert('Error al registrar. Verifique que el servidor esta corriendo.');
+    showToast('Error al registrar. Verifique que el servidor está corriendo.', 'error');
   }
 
   btn.disabled = false;
@@ -786,6 +929,7 @@ async function sfProcesar(file) {
     icon.textContent = 'OK';
     tit.textContent  = 'Factura registrada';
     sub.textContent  = data.mensaje;
+    marcarPasoOnboarding(3);
 
   } catch (err) {
     icon.textContent = '❌';
@@ -823,7 +967,7 @@ function sfMostrarDatos(d) {
 
 async function sfConfirmar() {
   const empresa_id = document.getElementById('sf-empresa-select').value;
-  if (!empresa_id) { alert('Selecciona una empresa'); return; }
+  if (!empresa_id) { showToast('Selecciona una empresa', 'error'); return; }
 
   const res  = await fetch('/api/subir-factura/confirmar', {
     method: 'POST',
@@ -882,14 +1026,14 @@ async function cargarPendientes() {
     <div class="pend-card" id="pend-${p.id}" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1rem">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.75rem">
         <div>
-          <div style="font-weight:700;font-size:15px">📄 ${d.numero || '(sin número)'}</div>
+          <div style="font-weight:700;font-size:15px">📄 ${esc(d.numero || '(sin número)')}</div>
           <div style="font-size:13px;color:#64748b;margin-top:3px">
-            Proveedor: <b>${d.proveedor_nombre || d.proveedor_nit || '—'}</b>
-            &nbsp;·&nbsp; Fecha: ${d.fecha || '—'}
+            Proveedor: <b>${esc(d.proveedor_nombre || d.proveedor_nit || '—')}</b>
+            &nbsp;·&nbsp; Fecha: ${esc(d.fecha || '—')}
           </div>
           <div style="font-size:13px;color:#64748b">
-            NIT receptor leído: <code style="background:#1e293b;padding:1px 6px;border-radius:4px">${d.receptor_nit || 'no detectado'}</code>
-            &nbsp;·&nbsp; Nombre: ${d.receptor_nombre || '—'}
+            NIT receptor leído: <code style="background:#1e293b;padding:1px 6px;border-radius:4px">${esc(d.receptor_nit || 'no detectado')}</code>
+            &nbsp;·&nbsp; Nombre: ${esc(d.receptor_nombre || '—')}
           </div>
         </div>
         <div style="text-align:right">
@@ -911,7 +1055,7 @@ async function cargarPendientes() {
 
 async function asignarPendiente(pendienteId) {
   const sel = document.getElementById(`sel-${pendienteId}`);
-  if (!sel.value) { alert('Selecciona una empresa'); return; }
+  if (!sel.value) { showToast('Selecciona una empresa', 'error'); return; }
   const res = await fetch(`/api/pendientes/${pendienteId}/asignar`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
@@ -920,17 +1064,22 @@ async function asignarPendiente(pendienteId) {
   if (res.ok) {
     document.getElementById(`pend-${pendienteId}`).remove();
     await cargarPendientes();
-    mostrarToast('Factura asignada correctamente');
+    showToast('Factura asignada correctamente', 'success');
   } else {
-    alert('Error: ' + res.error);
+    showToast('Error: ' + (res.error || 'desconocido'), 'error');
   }
 }
 
 async function ignorarPendiente(pendienteId) {
-  if (!confirm('¿Eliminar esta factura pendiente?')) return;
-  await fetch(`/api/pendientes/${pendienteId}`, { method: 'DELETE' });
-  document.getElementById(`pend-${pendienteId}`).remove();
-  await cargarPendientes();
+  abrirConfirmar(
+    '¿Eliminar esta factura pendiente?',
+    'Esta acción eliminará la factura sin asignarla a ninguna empresa. No se puede deshacer.',
+    async () => {
+      await fetch(`/api/pendientes/${pendienteId}`, { method: 'DELETE' });
+      document.getElementById(`pend-${pendienteId}`).remove();
+      await cargarPendientes();
+    }
+  );
 }
 
 // ── CREAR / EDITAR EMPRESA ────────────────────────────────────────────────────
@@ -1112,7 +1261,8 @@ async function dianProcesar(file) {
     area.style.display = 'none';
     res_box.style.display = 'block';
 
-    const nuevasRows = (data.detalle_nuevas || []).map(f => `<tr>
+    const _dianNuevas = data.detalle_nuevas || [];
+    const nuevasRows = _dianNuevas.map(f => `<tr>
       <td>${f.numero || '—'}</td>
       <td>${f.fecha || '—'}</td>
       <td>${f.nombre_emisor || '—'}</td>
@@ -1121,6 +1271,9 @@ async function dianProcesar(file) {
       <td style="font-family:monospace;font-size:10px">${(f.cufe||'').slice(0,16)}…</td>
     </tr>`).join('');
 
+    // Guardar las nuevas en window para que el botón las pueda usar
+    window._dianPendientes = _dianNuevas;
+
     res_box.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem">
         <div class="cal-kpi ok"><div class="cal-kpi-num">${data.total_dian}</div><div class="cal-kpi-label">Total en DIAN</div></div>
@@ -1128,17 +1281,51 @@ async function dianProcesar(file) {
         <div class="cal-kpi ${data.nuevas > 0 ? 'urgente' : 'ok'}"><div class="cal-kpi-num">${data.nuevas}</div><div class="cal-kpi-label">Facturas nuevas</div></div>
       </div>
       ${data.nuevas > 0 ? `
-        <h4 style="margin:0 0 .75rem">Facturas en DIAN que no están en ContaBot:</h4>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;flex-wrap:wrap;gap:.75rem">
+          <h4 style="margin:0">Facturas en DIAN que no están en ContaBot:</h4>
+          <button class="btn-demo" id="btn-registrar-dian" onclick="dianRegistrarTodas()">
+            ✚ Registrar ${data.nuevas} factura${data.nuevas !== 1 ? 's' : ''} en ContaBot
+          </button>
+        </div>
         <div class="table-wrap">
           <table class="data-table">
             <thead><tr><th>N° Factura</th><th>Fecha</th><th>Emisor</th><th>NIT</th><th>Total</th><th>CUFE</th></tr></thead>
             <tbody>${nuevasRows}</tbody>
           </table>
-        </div>` : '<p style="color:var(--green);font-weight:600">Todas las facturas DIAN ya están registradas en ContaBot.</p>'}
-      <button class="btn-demo" style="margin-top:1rem" onclick="initDian();document.getElementById('dian-upload-area').style.display=''">Analizar otro archivo</button>`;
+        </div>` : '<p style="color:var(--green);font-weight:600">✓ Todas las facturas DIAN ya están registradas en ContaBot.</p>'}
+      <button class="btn-demo" style="margin-top:1rem;background:var(--bg3);color:var(--text);box-shadow:none" onclick="initDian();document.getElementById('dian-upload-area').style.display=''">Analizar otro archivo</button>`;
 
   } catch (err) {
     area.innerHTML = `<div class="li-upload-icon">❌</div><div class="li-upload-text" style="color:var(--red)">Error de conexión</div><button class="li-select-btn" onclick="initDian()">Reintentar</button>`;
+  }
+}
+
+async function dianRegistrarTodas() {
+  const btn = document.getElementById('btn-registrar-dian');
+  const facturas = window._dianPendientes || [];
+  if (!facturas.length || !empresaActual) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Registrando…';
+
+  try {
+    const res  = await fetch(`/api/empresa/${empresaActual.id}/importar-dian/registrar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(facturas),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = `✓ ${data.insertadas} factura${data.insertadas !== 1 ? 's' : ''} registrada${data.insertadas !== 1 ? 's' : ''}`;
+      btn.style.background = 'var(--green)';
+      window._dianPendientes = [];
+    } else {
+      btn.textContent = 'Error — reintentar';
+      btn.disabled = false;
+    }
+  } catch {
+    btn.textContent = 'Error — reintentar';
+    btn.disabled = false;
   }
 }
 
@@ -1401,6 +1588,110 @@ function concNueva() { initConciliacion(); }
 
 let _flujoCajaChart = null;
 
+// ── Archivos ──────────────────────────────────────────────────────────────────
+
+const MESES_ES = {
+  '01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio',
+  '07':'Julio','08':'Agosto','09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre',
+};
+
+function mesLabel(key) {
+  if (!key || key === 'sin-fecha') return 'Sin fecha';
+  const [y, m] = key.split('-');
+  return `${MESES_ES[m] || m} ${y}`;
+}
+
+let _archivosData = [];
+
+async function loadArchivos() {
+  const container = document.getElementById('archivos-container');
+  container.innerHTML = '<p class="muted" style="padding:1rem">Cargando archivos…</p>';
+  _archivosData = await fetch('/api/archivos').then(r => r.json());
+
+  // Poblar filtro de meses con todos los meses disponibles
+  const todosMeses = new Set();
+  _archivosData.forEach(emp => emp.meses.forEach(m => todosMeses.add(m.mes)));
+  const selMes = document.getElementById('arch-filtro-mes');
+  const mesActual = selMes.value;
+  selMes.innerHTML = '<option value="">Todos los meses</option>' +
+    [...todosMeses].sort().reverse().map(m => `<option value="${m}" ${m===mesActual?'selected':''}>${mesLabel(m)}</option>`).join('');
+
+  renderArchivos();
+}
+
+function renderArchivos() {
+  const container  = document.getElementById('archivos-container');
+  const filtroCliente = (document.getElementById('arch-filtro-cliente')?.value || '').toLowerCase().trim();
+  const filtroMes     = document.getElementById('arch-filtro-mes')?.value || '';
+
+  let totalArchivos = 0;
+
+  const html = _archivosData.map(emp => {
+    if (filtroCliente && !emp.razon_social.toLowerCase().includes(filtroCliente)) return '';
+
+    const mesesFiltrados = emp.meses.map(mes => {
+      if (filtroMes && mes.mes !== filtroMes) return null;
+      return mes;
+    }).filter(Boolean);
+
+    if (!mesesFiltrados.length) return '';
+
+    const totalEmp = mesesFiltrados.reduce((a,m) => a + m.facturas.length, 0);
+    totalArchivos += totalEmp;
+
+    return `
+    <details class="arch-empresa-card" open>
+      <summary class="arch-empresa-header" style="border-left:4px solid ${emp.color}">
+        <span class="arch-icono">${emp.icono}</span>
+        <div>
+          <div class="arch-empresa-nombre">${emp.razon_social}</div>
+          <div class="arch-empresa-nit muted">NIT ${emp.nit}</div>
+        </div>
+        <div class="arch-empresa-count muted">${totalEmp} archivo${totalEmp!==1?'s':''}</div>
+        <span class="arch-chevron">▾</span>
+      </summary>
+      <div class="arch-meses">
+        ${mesesFiltrados.map(mes => `
+          <details class="arch-mes-group" open>
+            <summary class="arch-mes-title">
+              <span class="arch-mes-folder">📁</span>
+              <span>${mesLabel(mes.mes)}</span>
+              <span class="arch-mes-count">${mes.facturas.length} archivo${mes.facturas.length!==1?'s':''}</span>
+              <span class="arch-chevron" style="font-size:11px;margin-left:auto">▾</span>
+            </summary>
+            <div class="arch-files">
+              ${mes.facturas.map(f => {
+                const rawExt = f.archivo_url ? f.archivo_url.split('.').pop().split('?')[0].toUpperCase() : '';
+                const ext = ['XML','PDF','ZIP'].includes(rawExt) ? rawExt : 'XML';
+                const dianUrl = f.cufe ? `https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=${f.cufe}` : null;
+                const cufeShort = f.cufe ? f.cufe.slice(0,14)+'…' : '—';
+                const tieneArchivo = f.archivo_url && !f.archivo_url.startsWith('/app');
+                return `
+                <div class="arch-file-row">
+                  <span class="arch-file-icon">📄</span>
+                  <div class="arch-file-info">
+                    <div class="arch-file-numero">${f.numero}</div>
+                    <div class="arch-file-meta muted">${f.fecha || '—'} · ${f.proveedor || '—'} · ${COP(f.total||0)}</div>
+                    ${f.cufe ? `<div class="arch-file-cufe muted" title="${f.cufe}">CUFE: <span style="font-family:var(--mono)">${cufeShort}</span></div>` : ''}
+                  </div>
+                  <div class="arch-file-actions">
+                    ${tieneArchivo ? `<a class="arch-btn" href="/api/factura/archivo?path=${encodeURIComponent(f.archivo_url)}" target="_blank" title="Descargar ${ext}">⬇ ${ext}</a>` : '<span class="muted" style="font-size:11px">Sin archivo</span>'}
+                    ${dianUrl ? `<a class="arch-btn arch-btn-dian" href="${dianUrl}" target="_blank" rel="noopener" title="Verificar en DIAN">🔗 DIAN</a>` : ''}
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          </details>
+        `).join('')}
+      </div>
+    </details>`;
+  }).join('');
+
+  container.innerHTML = html || '<p class="muted" style="padding:1rem">No hay archivos con esos filtros.</p>';
+  const badge = document.getElementById('arch-total-badge');
+  if (badge) badge.textContent = totalArchivos ? `${totalArchivos} archivo${totalArchivos!==1?'s':''}` : '';
+}
+
 async function loadDeclaraciones() {
   const data = await fetch('/api/declaraciones').then(r => r.json());
 
@@ -1439,8 +1730,8 @@ async function loadDeclaraciones() {
     <div style="background:var(--bg2);border-radius:14px;border:1px solid var(--border);overflow:hidden">
       <div style="padding:1rem 1.25rem;border-left:4px solid ${e.color};display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-size:15px;font-weight:700">${e.razon_social}</div>
-          <div style="font-size:12px;color:var(--muted)">NIT ${e.nit} · <span style="color:${e.aplica_rtefte?'var(--blue)':'var(--muted)'}">${e.regimen}</span></div>
+          <div style="font-size:15px;font-weight:700">${esc(e.razon_social)}</div>
+          <div style="font-size:12px;color:var(--muted)">NIT ${esc(e.nit)} · <span style="color:${e.aplica_rtefte?'var(--blue)':'var(--muted)'}">${esc(e.regimen)}</span></div>
         </div>
         <div style="text-align:right">
           <div style="font-size:1.3rem;font-weight:800;color:${e.total>0?'var(--red)':'var(--muted)'}">${COP(e.total)}</div>
