@@ -53,6 +53,34 @@ app.config.update(
 limiter = Limiter(get_remote_address, app=app, default_limits=[])
 
 
+# ── Cifrado de tokens OAuth ───────────────────────────────────────────────────
+
+def _get_fernet():
+    key = os.environ.get("ENCRYPTION_KEY", "")
+    if not key:
+        return None
+    try:
+        from cryptography.fernet import Fernet
+        return Fernet(key.encode() if isinstance(key, str) else key)
+    except Exception:
+        return None
+
+def _encrypt_token(token: str) -> str:
+    f = _get_fernet()
+    if not f:
+        return token
+    return f.encrypt(token.encode()).decode()
+
+def _decrypt_token(token: str) -> str:
+    f = _get_fernet()
+    if not f:
+        return token
+    try:
+        return f.decrypt(token.encode()).decode()
+    except Exception:
+        return token  # plaintext fallback for tokens stored before encryption was enabled
+
+
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
 def login_required(f):
@@ -749,8 +777,7 @@ def factura_manual():
 
     try:
         if tipo == "gasto":
-            sb.table("facturas_gastos").upsert({
-                "empresa_id":       data["empresa_id"],
+            _insertar_factura_gasto(data["empresa_id"], {
                 "numero":           data["numero"],
                 "cufe":             "MANUAL-" + data["numero"],
                 "fecha":            fecha,
@@ -767,8 +794,7 @@ def factura_manual():
                 "total_factura":    data["total_factura"],
                 "valor_neto":       data["valor_neto"],
                 "estado":           estado,
-                "archivo_pdf":      "",
-            }, on_conflict="empresa_id,numero").execute()
+            }, fuente="manual")
         else:
             sb.table("facturas_venta").upsert({
                 "empresa_id":       data["empresa_id"],
@@ -793,7 +819,7 @@ def factura_manual():
         return jsonify({"ok": True})
     except Exception as ex:
         logging.exception('Error en endpoint')
-        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 400
+        return jsonify({"ok": False, "error": "Error interno"}), 400
 
 
 # ── Procesar imagen de factura (QR / OCR) ────────────────────────────────────
@@ -1721,8 +1747,7 @@ def importar_dian_registrar(eid):
             continue
         numero = f.get("numero") or cufe[:12]
         fecha  = (f.get("fecha") or dt.today().strftime("%Y-%m-%d"))[:10]
-        sb.table("facturas_gastos").insert({
-            "empresa_id":       eid,
+        _insertar_factura_gasto(eid, {
             "numero":           numero,
             "cufe":             cufe,
             "fecha":            fecha,
@@ -1733,9 +1758,7 @@ def importar_dian_registrar(eid):
             "iva":              0,
             "total_factura":    float(f.get("total") or 0),
             "valor_neto":       float(f.get("total") or 0),
-            "estado":           "PENDIENTE",
-            "fuente":           "dian",
-        }).execute()
+        }, fuente="dian")
         registradas_antes.add(cufe)
         insertadas += 1
 
@@ -1757,7 +1780,7 @@ def marcar_pagada(tipo, numero, eid):
         return jsonify({"ok": True})
     except Exception as ex:
         logging.exception('Error en endpoint')
-        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 400
+        return jsonify({"ok": False, "error": "Error interno"}), 400
 
 
 # ── Borrar factura ────────────────────────────────────────────────────────────
@@ -1788,7 +1811,7 @@ def borrar_factura(tipo, numero, eid):
         return jsonify({"ok": True})
     except Exception as ex:
         logging.exception('Error en endpoint')
-        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 400
+        return jsonify({"ok": False, "error": "Error interno"}), 400
 
 
 # ── Borrar empresa ─────────────────────────────────────────────────────────────
@@ -1823,7 +1846,7 @@ def borrar_empresa(eid):
         return jsonify({"ok": True})
     except Exception as ex:
         logging.exception('Error en endpoint')
-        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 400
+        return jsonify({"ok": False, "error": "Error interno"}), 400
 
 
 # ── Conciliación bancaria — cruce de extracto CSV vs facturas ─────────────────
@@ -1997,7 +2020,7 @@ def completar_obligacion():
         return jsonify({"ok": True})
     except Exception as e:
         logging.exception('Error en endpoint')
-        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
+        return jsonify({"ok": False, "error": "Error interno"}), 500
 
 
 @app.route("/api/obligacion/completar", methods=["DELETE"])
@@ -2012,7 +2035,7 @@ def descompletar_obligacion():
         return jsonify({"ok": True})
     except Exception as e:
         logging.exception('Error en endpoint')
-        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
+        return jsonify({"ok": False, "error": "Error interno"}), 500
 
 
 @app.route("/api/pendientes", methods=["GET"])
@@ -2025,7 +2048,7 @@ def listar_pendientes():
         return jsonify({"ok": True, "pendientes": rows, "empresas": empresas})
     except Exception as e:
         logging.exception('Error en endpoint')
-        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
+        return jsonify({"ok": False, "error": "Error interno"}), 500
 
 
 @app.route("/api/pendientes/<pendiente_id>/asignar", methods=["POST"])
@@ -2036,8 +2059,13 @@ def asignar_pendiente(pendiente_id):
     empresa_id = body.get("empresa_id")
     if not empresa_id:
         return jsonify({"ok": False, "error": "empresa_id requerido"}), 400
+
+    err = validate_empresa_ownership(empresa_id)
+    if err: return err
+
     try:
-        row = sb.table("empresas_pendientes").select("*").eq("id", pendiente_id).execute().data
+        cid = session["contador_id"]
+        row = sb.table("empresas_pendientes").select("*").eq("id", pendiente_id).eq("contador_id", cid).execute().data
         if not row:
             return jsonify({"ok": False, "error": "No encontrado"}), 404
         p = row[0]
@@ -2050,7 +2078,7 @@ def asignar_pendiente(pendiente_id):
         return jsonify({"ok": True})
     except Exception as e:
         logging.exception('Error en endpoint')
-        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
+        return jsonify({"ok": False, "error": "Error interno"}), 500
 
 
 @app.route("/api/pendientes/<pendiente_id>", methods=["DELETE"])
@@ -2061,7 +2089,7 @@ def eliminar_pendiente(pendiente_id):
         return jsonify({"ok": True})
     except Exception as e:
         logging.exception('Error en endpoint')
-        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
+        return jsonify({"ok": False, "error": "Error interno"}), 500
 
 
 # ── Gmail OAuth multi-cliente ────────────────────────────────────────────────
@@ -2150,7 +2178,7 @@ def auth_gmail_callback():
     sb.table("gmail_tokens").upsert({
         "empresa_id": int(empresa_id),
         "email": email,
-        "refresh_token": refresh_token,
+        "refresh_token": _encrypt_token(refresh_token),
         "token_created_at": datetime.now(timezone.utc).isoformat(),
         "activo": True,
     }, on_conflict="empresa_id").execute()
@@ -2214,7 +2242,7 @@ def gmail_push():
             from gmail_facturas import escanear_inbox
             escanear_inbox(empresa_id=empresa_id, max_correos=20, service=service)
     except Exception as e:
-        print(f"[push] Error procesando notificación {email}: {e}")
+        logging.exception(f"[push] Error procesando notificación {email}")
     return "ok", 200
 
 @app.route("/api/gmail/activar-push", methods=["POST"])
@@ -2227,7 +2255,7 @@ def activar_push_gmail():
         return jsonify({"ok": True, "mensaje": "Watches registrados"})
     except Exception as e:
         logging.exception('Error en endpoint')
-        return jsonify({\"ok\": False, \"error\": \"Error interno\"}), 500
+        return jsonify({"ok": False, "error": "Error interno"}), 500
 
 
 @app.route("/api/calendario/notificar", methods=["POST"])
@@ -2500,8 +2528,8 @@ def telegram_webhook():
                 f"Ya aparece en el dashboard de ContaBot."
             )
         except Exception as ex:
-            print(f"[webhook] Error asignando empresa: {ex}")
-            edit_message(f"❌ Error: {ex}")
+            logging.exception("[webhook] Error asignando empresa")
+            edit_message("❌ Error interno.")
 
     elif data.startswith("confirmar_empresa:"):
         pendiente_id = data.split(":", 1)[1]
@@ -2559,8 +2587,8 @@ def telegram_webhook():
                 f"Ya aparece en el dashboard de ContaBot."
             )
         except Exception as ex:
-            print(f"[webhook] Error confirmando empresa: {ex}")
-            edit_message(f"❌ Error interno: {ex}")
+            logging.exception("[webhook] Error confirmando empresa")
+            edit_message("❌ Error interno.")
 
     elif data.startswith("ignorar_empresa:"):
         pendiente_id = data.split(":", 1)[1]
@@ -2572,7 +2600,7 @@ def telegram_webhook():
             sb.table("empresas_pendientes").delete().eq("id", pendiente_id).execute()
             edit_message(f"🗑️ Factura de *{nombre}* (NIT `{nit}`) ignorada y eliminada.")
         except Exception as ex:
-            print(f"[webhook] Error ignorando empresa: {ex}")
+            logging.exception("[webhook] Error ignorando empresa")
 
     return jsonify({"ok": True})
 
@@ -2586,7 +2614,7 @@ def _cron_gmail():
         from gmail_facturas import renovar_todos_los_watches
         renovar_todos_los_watches()
     except Exception as ex:
-        print(f"[cron] Gmail watches error: {ex}")
+        logging.exception("[cron] Gmail watches error")
 
 def _cron_tokens_gmail():
     """Avisa por Telegram cuando un token de Gmail está en día 6 de 7."""
@@ -2623,9 +2651,9 @@ def _cron_tokens_gmail():
                 data=payload, headers={"Content-Type": "application/json"}
             )
             _urllib_req.urlopen(req, timeout=5)
-            print(f"[tokens] Aviso enviado: {nombre} ({t['email']}) día {dias}")
+            logging.info(f"[tokens] Aviso enviado: {nombre} ({t['email']}) día {dias}")
     except Exception as ex:
-        print(f"[tokens] Error chequeando tokens: {ex}")
+        logging.exception("[tokens] Error chequeando tokens")
 
 def _cron_obligaciones():
     """Notifica por Telegram las obligaciones que vencen en 7 días."""
@@ -2654,7 +2682,7 @@ def _cron_obligaciones():
         )
         urllib.request.urlopen(req, timeout=5)
     except Exception as ex:
-        print(f"[cron] Obligaciones error: {ex}")
+        logging.exception("[cron] Obligaciones error")
 
 def _iniciar_scheduler():
     try:
@@ -2664,11 +2692,11 @@ def _iniciar_scheduler():
         scheduler.add_job(_cron_obligaciones, "interval", hours=24,      id="obligaciones")
         scheduler.add_job(_cron_tokens_gmail, "cron",     hour=14, minute=0, id="tokens_gmail")  # 9am Colombia (UTC-5)
         scheduler.start()
-        print("[cron] Scheduler iniciado: Gmail Push (watches c/6d), tokens 9am, obligaciones c/24h")
+        logging.info("[cron] Scheduler iniciado: Gmail Push (watches c/6d), tokens 9am, obligaciones c/24h")
     except ImportError:
-        print("[cron] APScheduler no instalado — cron desactivado")
+        logging.warning("[cron] APScheduler no instalado — cron desactivado")
     except Exception as ex:
-        print(f"[cron] Error iniciando scheduler: {ex}")
+        logging.exception("[cron] Error iniciando scheduler")
 
 
 def _migrar_tablas():
@@ -2708,10 +2736,10 @@ def _migrar_tablas():
         except Exception:
             try:
                 sb.rpc("exec_sql", {"sql": sql}).execute()
-                print(f"[migración] Tabla {nombre} creada.")
+                logging.info(f"[migración] Tabla {nombre} creada.")
             except Exception as ex:
-                print(f"[migración] {nombre} no existe y no se pudo crear: {ex}")
-                print(f"[migración] Crea manualmente: {sql}")
+                logging.error(f"[migración] {nombre} no existe y no se pudo crear: {ex}")
+                logging.error(f"[migración] Crea manualmente: {sql}")
 
 
 if __name__ == "__main__":
