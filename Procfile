@@ -1,1 +1,1 @@
-web: python api/server.py
+web: gunicorn "api.server:app" --workers 4 --bind 0.0.0.0:$PORT --timeout 120

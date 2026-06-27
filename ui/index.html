@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap"/>
-  <link rel="stylesheet" href="styles.css?v=2"/>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css?v=6"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
 </head>
 <body>
 
@@ -26,9 +26,82 @@
   <div class="header-right">
     <span class="periodo-badge">Ene – Jun 2026</span>
     <span class="live-badge"><span class="live-dot"></span>ContaBot 2026</span>
+    <button class="logout-btn" onclick="abrirOnboarding()" style="background:rgba(255,255,255,.12);border:none;cursor:pointer;margin-right:.25rem" title="Guía de inicio">? Guía</button>
     <a href="/api/logout" class="logout-btn">Cerrar sesión</a>
   </div>
 </header>
+
+<!-- ── ONBOARDING MODAL ── -->
+<div id="onboarding-overlay" style="display:none;position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:2000;align-items:center;justify-content:center;padding:1rem">
+  <div class="ob-card">
+    <div class="ob-header">
+      <div>
+        <div class="ob-title">Guía de inicio — ContaBot</div>
+        <div class="ob-sub">Sigue estos pasos para configurar tu cuenta</div>
+      </div>
+      <button class="ob-close" onclick="cerrarOnboarding()">✕</button>
+    </div>
+
+    <div class="ob-steps">
+
+      <div class="ob-step" id="ob-step-1">
+        <div class="ob-step-num">1</div>
+        <div class="ob-step-body">
+          <div class="ob-step-title">Agrega tus empresas clientes</div>
+          <div class="ob-step-desc">En la sección <b>Empresas</b>, clic en <b>+ Nueva Empresa</b> y completa NIT, razón social y ciudad. Repite por cada cliente que gestionas.</div>
+          <button class="ob-btn" onclick="cerrarOnboarding();navTo('inicio');setTimeout(()=>abrirModalEmpresa(),300)">Ir a Empresas →</button>
+        </div>
+        <div class="ob-check" id="ob-check-1">✓</div>
+      </div>
+
+      <div class="ob-step" id="ob-step-2">
+        <div class="ob-step-num">2</div>
+        <div class="ob-step-body">
+          <div class="ob-step-title">Conecta el Gmail de cada empresa</div>
+          <div class="ob-step-desc">Abre cada empresa → pestaña <b>Configuración</b> → <b>Conectar Gmail</b>. ContaBot leerá automáticamente las facturas que lleguen a ese correo.</div>
+          <div class="ob-step-note">Requiere credenciales Google OAuth configuradas por el administrador.</div>
+        </div>
+        <div class="ob-check" id="ob-check-2">✓</div>
+      </div>
+
+      <div class="ob-step" id="ob-step-3">
+        <div class="ob-step-num">3</div>
+        <div class="ob-step-body">
+          <div class="ob-step-title">Sube tu primera factura manualmente</div>
+          <div class="ob-step-desc">Ve a <b>Subir Factura</b>, arrastra un PDF, XML o ZIP de factura electrónica DIAN. ContaBot extrae todos los datos automáticamente.</div>
+          <button class="ob-btn" onclick="cerrarOnboarding();navTo('subir-factura')">Ir a Subir Factura →</button>
+        </div>
+        <div class="ob-check" id="ob-check-3">✓</div>
+      </div>
+
+      <div class="ob-step" id="ob-step-4">
+        <div class="ob-step-num">4</div>
+        <div class="ob-step-body">
+          <div class="ob-step-title">Concilia con el reporte de la DIAN</div>
+          <div class="ob-step-desc">Descarga el Excel de facturas recibidas desde el portal DIAN (<b>catalogo-vpfe.dian.gov.co</b>). En tu empresa → <b>Conciliar DIAN</b> → súbelo. ContaBot detecta cuáles faltan y las registra en un clic.</div>
+          <a class="ob-btn ob-btn-outline" href="https://catalogo-vpfe.dian.gov.co" target="_blank" rel="noopener">Ir al portal DIAN ↗</a>
+        </div>
+        <div class="ob-check" id="ob-check-4">✓</div>
+      </div>
+
+      <div class="ob-step" id="ob-step-5">
+        <div class="ob-step-num">5</div>
+        <div class="ob-step-body">
+          <div class="ob-step-title">Revisa el Calendario tributario</div>
+          <div class="ob-step-desc">En <b>Calendario</b> tienes todas las fechas DIAN 2026 por empresa: IVA F-300, Retefuente F-350, ICA, Renta. Filtra por empresa y recibe alertas en Telegram.</div>
+          <button class="ob-btn" onclick="cerrarOnboarding();navTo('calendario');cargarCalendario()">Ver Calendario →</button>
+        </div>
+        <div class="ob-check" id="ob-check-5">✓</div>
+      </div>
+
+    </div>
+
+    <div class="ob-footer">
+      <span class="muted" style="font-size:12px">Puedes volver a esta guía en cualquier momento con el botón <b>? Guía</b> del encabezado.</span>
+      <button class="btn-demo" onclick="cerrarOnboarding()">Entendido, ir al dashboard</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── NAV ── -->
 <nav class="nav">
@@ -39,6 +112,7 @@
   <button class="nav-btn"         data-section="subir-factura"  onclick="navTo('subir-factura',this)">Subir Factura</button>
   <button class="nav-btn"         data-section="pendientes"     onclick="navTo('pendientes',this);cargarPendientes()" id="nav-pendientes">Bandeja Pendiente <span id="badge-pendientes" style="display:none;background:#ef4444;color:#fff;border-radius:99px;padding:1px 7px;font-size:11px;margin-left:4px">0</span></button>
   <button class="nav-btn"         data-section="declaraciones"  onclick="navTo('declaraciones',this)">Declaraciones</button>
+  <button class="nav-btn"         data-section="archivos"       onclick="navTo('archivos',this);loadArchivos()">Archivos</button>
   <button class="nav-btn"         data-section="calendario"     onclick="navTo('calendario',this);cargarCalendario()">Calendario</button>
   <button class="nav-btn"         data-section="empresa"   onclick="navTo('empresa',this)" id="nav-empresa" style="display:none">
     <span id="nav-empresa-nombre">Empresa</span>
@@ -127,7 +201,7 @@
         <thead><tr>
           <th>Número</th><th>Fecha</th><th>Proveedor</th><th>Categoría</th>
           <th>Subtotal</th><th>IVA</th><th>Retefuente</th><th>ReteIVA</th><th>ReteICA</th>
-          <th>Total</th><th>Neto a Pagar</th><th>Estado</th><th></th>
+          <th>Total</th><th>Neto a Pagar</th><th>Estado</th><th>CUFE</th><th></th>
         </tr></thead>
         <tbody id="tbody-gastos-e"></tbody>
       </table>
@@ -434,6 +508,9 @@
     <div class="wf-pregunta">"?Cuanto tiempo pasa usted o su equipo digitando facturas y corrigiendo retenciones cada mes?"</div>
     <p class="wf-cierre-sub">Esa respuesta es exactamente el tiempo que ContaBot le devuelve. Multipliquelo por 12 meses y por el numero de clientes.</p>
   </div>
+  <div style="text-align:center;margin-top:2rem;padding-bottom:.5rem">
+    <button class="btn-demo" style="font-size:15px;padding:.85rem 2rem" onclick="navTo('inicio',this)">Ver mi dashboard →</button>
+  </div>
 
 </section>
 
@@ -709,6 +786,21 @@
 <!-- ════════════════════════════════════
      VISTA: CALENDARIO TRIBUTARIO
 ═══════════════════════════════════════ -->
+<section id="section-archivos" class="section">
+  <div class="section-header">
+    <h2>Archivos de Facturas</h2>
+    <span class="muted" style="font-size:13px">Organizados por cliente y mes · Almacenados en Supabase</span>
+  </div>
+  <div class="arch-filtros">
+    <input id="arch-filtro-cliente" type="text" placeholder="Buscar cliente…" oninput="renderArchivos()" style="padding:.5rem .9rem;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:inherit;font-size:13.5px;min-width:200px">
+    <select id="arch-filtro-mes" onchange="renderArchivos()" style="padding:.5rem .9rem;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:inherit;font-size:13.5px">
+      <option value="">Todos los meses</option>
+    </select>
+    <span id="arch-total-badge" class="muted" style="font-size:13px;align-self:center"></span>
+  </div>
+  <div id="archivos-container"></div>
+</section>
+
 <section id="section-calendario" class="section">
 
   <div class="section-header">
@@ -749,8 +841,21 @@
 
 </section>
 
+<!-- Modal Confirmación Borrar -->
+<div id="modal-confirmar" role="dialog" aria-modal="true" aria-label="Confirmar acción" style="display:none;position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:3000;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--bg2);border-radius:16px;padding:1.75rem;width:100%;max-width:420px;box-shadow:0 24px 64px rgba(17,24,39,.22)">
+    <div style="font-size:2rem;margin-bottom:.75rem" id="conf-icon">⚠️</div>
+    <div style="font-weight:800;font-size:1.05rem;margin-bottom:.5rem" id="conf-titulo">¿Estás seguro?</div>
+    <div style="font-size:13.5px;color:var(--muted);margin-bottom:1.5rem;line-height:1.55" id="conf-mensaje"></div>
+    <div style="display:flex;gap:.75rem;justify-content:flex-end">
+      <button style="padding:.5rem 1.1rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-weight:600;cursor:pointer" onclick="cerrarConfirmar()">Cancelar</button>
+      <button id="conf-btn-ok" style="padding:.5rem 1.1rem;border-radius:8px;border:none;background:#dc2626;color:#fff;font-family:inherit;font-weight:700;cursor:pointer">Eliminar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal Nueva/Editar Empresa -->
-<div id="modal-empresa" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+<div id="modal-empresa" role="dialog" aria-modal="true" aria-label="Nueva empresa" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:var(--bg2);border-radius:16px;padding:2rem;width:100%;max-width:480px;margin:1rem">
     <h3 id="ne-titulo" style="margin:0 0 1.5rem;font-size:1.1rem">Nueva Empresa Cliente</h3>
     <div style="display:flex;flex-direction:column;gap:1rem">

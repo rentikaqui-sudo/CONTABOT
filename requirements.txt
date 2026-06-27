@@ -1,4 +1,6 @@
 flask==3.0.3
+bcrypt>=4.0.1
+flask-limiter>=3.5.0
 supabase>=2.4.0
 python-dotenv>=1.0.0
 reportlab==4.2.2
@@ -12,3 +14,4 @@ pytesseract>=0.3.10
 google-auth-oauthlib>=1.2.0
 google-api-python-client>=2.130.0
 APScheduler>=3.10.0
+cryptography>=41.0.0

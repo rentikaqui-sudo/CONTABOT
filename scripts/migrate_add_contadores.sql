@@ -77,3 +77,40 @@ CREATE INDEX IF NOT EXISTS idx_fv_cufe ON facturas_venta(cufe);
 ALTER TABLE gmail_tokens
     ADD COLUMN IF NOT EXISTS history_id    TEXT,
     ADD COLUMN IF NOT EXISTS watch_expires TEXT;
+
+-- 9. contador_id NOT NULL (solo si no hay empresas huérfanas)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM empresas_clientes WHERE contador_id IS NULL
+    ) THEN
+        ALTER TABLE empresas_clientes ALTER COLUMN contador_id SET NOT NULL;
+    ELSE
+        RAISE NOTICE 'Hay empresas sin contador_id — asígnalas antes de aplicar NOT NULL';
+    END IF;
+END $$;
+
+-- 10. ON DELETE CASCADE para facturas (evita FK violations si se borra empresa directamente)
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'facturas_venta_empresa_id_fkey'
+    ) THEN
+        ALTER TABLE facturas_venta DROP CONSTRAINT facturas_venta_empresa_id_fkey;
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'facturas_gastos_empresa_id_fkey'
+    ) THEN
+        ALTER TABLE facturas_gastos DROP CONSTRAINT facturas_gastos_empresa_id_fkey;
+    END IF;
+END $$;
+
+ALTER TABLE facturas_venta
+    ADD CONSTRAINT facturas_venta_empresa_id_fkey
+    FOREIGN KEY (empresa_id) REFERENCES empresas_clientes(id) ON DELETE CASCADE;
+
+ALTER TABLE facturas_gastos
+    ADD CONSTRAINT facturas_gastos_empresa_id_fkey
+    FOREIGN KEY (empresa_id) REFERENCES empresas_clientes(id) ON DELETE CASCADE;

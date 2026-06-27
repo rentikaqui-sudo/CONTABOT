@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS contadores (
 
 CREATE TABLE IF NOT EXISTS empresas_clientes (
     id          SERIAL PRIMARY KEY,
-    contador_id INTEGER REFERENCES contadores(id),
+    contador_id INTEGER NOT NULL REFERENCES contadores(id),
     razon_social TEXT NOT NULL,
     nit         TEXT UNIQUE NOT NULL,
     sector      TEXT,
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS empresas_clientes (
 
 CREATE TABLE IF NOT EXISTS facturas_venta (
     id                  SERIAL PRIMARY KEY,
-    empresa_id          INTEGER REFERENCES empresas_clientes(id),
+    empresa_id          INTEGER REFERENCES empresas_clientes(id) ON DELETE CASCADE,
     numero              TEXT NOT NULL,
     cufe                TEXT,
     fecha               DATE,
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS facturas_venta (
 
 CREATE TABLE IF NOT EXISTS facturas_gastos (
     id                  SERIAL PRIMARY KEY,
-    empresa_id          INTEGER REFERENCES empresas_clientes(id),
+    empresa_id          INTEGER REFERENCES empresas_clientes(id) ON DELETE CASCADE,
     numero              TEXT NOT NULL,
     cufe                TEXT,
     fecha               DATE,

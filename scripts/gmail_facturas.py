@@ -16,7 +16,7 @@ Uso:
     python scripts/gmail_facturas.py --max 100        # cuántos correos revisar
 """
 
-import os, sys, base64, re, argparse, json
+import os, sys, base64, re, argparse, json, logging
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -105,6 +105,18 @@ def guardar_remitente(email, nombre_empresa, confianza):
 
 # ── Autenticación Gmail ───────────────────────────────────────────────────────
 
+def _decrypt_token(token: str) -> str:
+    key = os.environ.get("ENCRYPTION_KEY", "")
+    if not key:
+        return token
+    try:
+        from cryptography.fernet import Fernet
+        f = Fernet(key.encode() if isinstance(key, str) else key)
+        return f.decrypt(token.encode()).decode()
+    except Exception:
+        return token  # plaintext fallback
+
+
 def _get_client_secrets():
     """Lee client_id y client_secret desde env vars o gmail_credentials.json."""
     client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
@@ -127,11 +139,11 @@ def get_gmail_from_supabase(empresa_id: int, sb=None):
     t = rows[0]
     client_id, client_secret = _get_client_secrets()
     if not client_id:
-        print("ERROR: GOOGLE_CLIENT_ID no configurado")
+        logging.error("[gmail] GOOGLE_CLIENT_ID no configurado")
         return None, None
     creds = Credentials(
         token=None,
-        refresh_token=t["refresh_token"],
+        refresh_token=_decrypt_token(t["refresh_token"]),
         token_uri="https://oauth2.googleapis.com/token",
         client_id=client_id,
         client_secret=client_secret,
@@ -250,7 +262,7 @@ def renovar_todos_los_watches():
             if service:
                 registrar_watch(service, t["empresa_id"])
         except Exception as e:
-            print(f"[push] Error renovando watch empresa {t['empresa_id']}: {e}")
+            logging.exception(f"[push] Error renovando watch empresa {t['empresa_id']}")
 
 def escanear_desde_history(service, empresa_id: int, email: str, history_id: str):
     """Lee solo los mensajes nuevos desde el último historyId conocido."""
@@ -277,7 +289,7 @@ def escanear_desde_history(service, empresa_id: int, email: str, history_id: str
             msg = service_obj.users().messages().get(userId="me", id=mid, format="full").execute()
             procesar_mensaje(service_obj, msg, empresa_id)
     except Exception as e:
-        print(f"[push] Error history empresa {empresa_id}: {e}")
+        logging.exception(f"[push] Error history empresa {empresa_id}")
 
 def hay_correos_nuevos(service) -> bool:
     """Consulta liviana: retorna True solo si hay no leídos con adjuntos PDF/XML/ZIP."""
@@ -313,7 +325,7 @@ def escanear_todas_empresas(max_correos=50, sb=None):
             print(f"\n[gmail] Escaneando {email} (empresa {eid})...")
             escanear_inbox(empresa_id=eid, max_correos=max_correos, service=service)
         except Exception as e:
-            print(f"[gmail] Error empresa {eid} ({email}): {e}")
+            logging.exception(f"[gmail] Error empresa {eid} ({email})")
 
 def escanear_inbox(empresa_id, max_correos=100, service=None):
     if service is None:
