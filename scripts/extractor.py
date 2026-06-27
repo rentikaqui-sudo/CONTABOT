@@ -436,14 +436,17 @@ def _nit_base(nit: str) -> str:
     return re.sub(r"[^\d]", "", nit)
 
 
-def detectar_empresa(receptor_nit: str, sb) -> dict | None:
+def detectar_empresa(receptor_nit: str, sb, contador_id=None) -> dict | None:
     """Busca en Supabase la empresa cuyo NIT coincide con el receptor."""
     if not receptor_nit:
         return None
     nit_factura = _nit_base(receptor_nit)
     if not nit_factura:
         return None
-    empresas = sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
+    q = sb.table("empresas_clientes").select("id,nit,razon_social,contador_id")
+    if contador_id:
+        q = q.eq("contador_id", contador_id)
+    empresas = q.execute().data
     for e in empresas:
         nit_empresa = _nit_base(e.get("nit", ""))
         # Coincide si son iguales o uno empieza con el otro (variantes con/sin verificador)
@@ -451,16 +454,16 @@ def detectar_empresa(receptor_nit: str, sb) -> dict | None:
             return e
     return None
 
-def detectar_o_crear_empresa(datos: dict, sb) -> dict | None:
+def detectar_o_crear_empresa(datos: dict, sb, contador_id=None) -> dict | None:
     """
     Busca la empresa por NIT receptor (gasto) o proveedor (venta).
     Primero intenta receptor (caso más común). Si no, intenta proveedor
     para cuando la empresa es quien emite la factura (ventas).
     """
-    empresa = detectar_empresa(datos.get("receptor_nit", ""), sb)
+    empresa = detectar_empresa(datos.get("receptor_nit", ""), sb, contador_id)
     if empresa:
         return empresa
-    return detectar_empresa(datos.get("proveedor_nit", ""), sb)
+    return detectar_empresa(datos.get("proveedor_nit", ""), sb, contador_id)
 
 
 def subir_a_storage(ruta_local: str, empresa_id: int, numero: str, fecha: str, sb) -> str | None:
@@ -492,23 +495,25 @@ def subir_a_storage(ruta_local: str, empresa_id: int, numero: str, fecha: str, s
         return None
 
 
-def guardar_empresa_pendiente(datos: dict, fuente: str, sb) -> str | None:
+def guardar_empresa_pendiente(datos: dict, fuente: str, sb, contador_id=None) -> str | None:
     """
     Guarda los datos de una factura con empresa desconocida en empresas_pendientes.
     Retorna el UUID de la fila creada, o None si falla.
     """
     try:
         import json as _json
-        # Serializar datos (los valores float pueden causar problemas)
         factura_json = {k: (float(v) if isinstance(v, (int, float)) else v)
                         for k, v in (datos or {}).items()}
-        res = sb.table("empresas_pendientes").insert({
+        row = {
             "nit":          datos.get("receptor_nit", ""),
             "razon_social": datos.get("receptor_nombre", ""),
             "ciudad":       datos.get("receptor_ciudad", ""),
             "factura_data": factura_json,
             "fuente":       fuente,
-        }).execute()
+        }
+        if contador_id:
+            row["contador_id"] = contador_id
+        res = sb.table("empresas_pendientes").insert(row).execute()
         return res.data[0]["id"] if res.data else None
     except Exception as e:
         print(f"Error guardando empresa pendiente: {e}")

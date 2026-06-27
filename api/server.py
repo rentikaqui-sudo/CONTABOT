@@ -2352,23 +2352,24 @@ def subir_factura():
     if not datos:
         return jsonify({"ok": False, "error": "No se pudieron extraer datos de la factura"}), 400
 
-    # Detectar empresa por NIT receptor
-    empresa = detectar_o_crear_empresa(datos, sb)
+    # Detectar empresa por NIT receptor — solo entre las empresas del contador logueado
+    cid = session["contador_id"]
+    empresa = detectar_o_crear_empresa(datos, sb, contador_id=cid)
 
     # Fallback: si el XML dio NIT receptor pero no coincidió, intentar con el NIT del PDF
     if not empresa and datos_pdf and datos_pdf.get("receptor_nit") and datos_pdf.get("receptor_nit") != datos.get("receptor_nit"):
         datos["receptor_nit"] = datos_pdf["receptor_nit"]
         if datos_pdf.get("receptor_nombre"):
             datos["receptor_nombre"] = datos_pdf["receptor_nombre"]
-        empresa = detectar_o_crear_empresa(datos, sb)
+        empresa = detectar_o_crear_empresa(datos, sb, contador_id=cid)
 
     empresa_id = empresa["id"] if empresa else None
     empresa_nombre = empresa["razon_social"] if empresa else "Empresa desconocida"
 
-    # Verificar si es empresa conocida — si no, avisar por Telegram con botones y devolver info al UI
+    # Empresa no reconocida — mostrar selector manual en el UI (no crear automáticamente)
     if not empresa_id:
-        pendiente_id = guardar_empresa_pendiente(datos, fuente="upload", sb=sb)
-        empresas_all = sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
+        pendiente_id = guardar_empresa_pendiente(datos, fuente="upload", sb=sb, contador_id=cid)
+        empresas_all = sb.table("empresas_clientes").select("id,nit,razon_social").eq("contador_id", cid).execute().data
         notificar_empresa_desconocida(datos, fuente="upload", pendiente_id=pendiente_id, empresas=empresas_all)
         return jsonify({
             "ok": True,
@@ -2376,7 +2377,7 @@ def subir_factura():
             "empresa_detectada": False,
             "pendiente_id": pendiente_id,
             "empresas_disponibles": empresas_all,
-            "mensaje": f"No se detectó la empresa receptora (NIT: {datos.get('receptor_nit') or 'no encontrado'}). Te pregunté en Telegram — o selecciona manualmente.",
+            "mensaje": f"No se reconoció la empresa receptora (NIT: {datos.get('receptor_nit') or 'no encontrado'}). Seleccioná la empresa manualmente o créala primero.",
         })
 
     # Mover archivo a carpeta definitiva
