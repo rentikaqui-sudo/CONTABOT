@@ -395,10 +395,10 @@ async function runFlujoA() {
     const f = data[i];
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><b>${f.numero}</b></td>
-      <td class="muted">${f.fecha}</td>
-      <td>${f.cliente_nombre}</td>
-      <td class="muted">${f.cliente_ciudad}</td>
+      <td><b>${esc(f.numero)}</b></td>
+      <td class="muted">${esc(f.fecha)}</td>
+      <td>${esc(f.cliente_nombre)}</td>
+      <td class="muted">${esc(f.cliente_ciudad)}</td>
       <td>${COP(f.subtotal)}</td>
       <td style="color:var(--yellow)">${COP(f.iva)}</td>
       <td style="color:var(--red)">(${COP(f.retefuente)})</td>
@@ -958,8 +958,8 @@ function sfMostrarDatos(d) {
     .map(([k, label]) => {
       const val = k === 'cufe' ? d[k].slice(0, 20) + '…' : fmt(d[k]);
       return `<div class="li-dato-item">
-        <div class="li-dato-label">${label}</div>
-        <div class="li-dato-val">${val}</div>
+        <div class="li-dato-label">${esc(label)}</div>
+        <div class="li-dato-val">${esc(val)}</div>
       </div>`;
     });
   document.getElementById('sf-datos-grid').innerHTML = items.join('') || '<p style="color:var(--muted)">Sin datos estructurados.</p>';

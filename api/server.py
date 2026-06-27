@@ -195,6 +195,7 @@ def static_files(f):
 # ── Auth ─────────────────────────────────────────────────────────────────────
 
 @app.route("/api/registro", methods=["POST"])
+@limiter.limit("5 per minute")
 def api_registro():
     data = request.get_json() or {}
     email   = (data.get("email") or "").strip().lower()
@@ -826,6 +827,7 @@ def factura_manual():
 
 @app.route("/api/procesar-imagen", methods=["POST"])
 @login_required
+@limiter.limit("10 per minute")
 def procesar_imagen():
     if "imagen" not in request.files:
         return jsonify({"ok": False, "error": "No se recibió imagen"}), 400
@@ -933,6 +935,7 @@ def _parse_ocr_texto(texto):
 
 @app.route("/api/empresa/<int:eid>/informe-pdf")
 @login_required
+@limiter.limit("10 per minute")
 def informe_pdf(eid):
     err = validate_empresa_ownership(eid)
     if err: return err
@@ -1406,6 +1409,7 @@ def _pct_iva(subtotal, iva):
 
 @app.route("/api/empresa/<int:eid>/informe-excel")
 @login_required
+@limiter.limit("10 per minute")
 def informe_excel(eid):
     err = validate_empresa_ownership(eid)
     if err: return err
@@ -2214,6 +2218,14 @@ def gmail_push():
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return "Unauthorized", 403
+    token = auth_header[7:]
+    try:
+        from google.oauth2 import id_token as _id_token
+        import google.auth.transport.requests as _ga_req
+        _id_token.verify_oauth2_token(token, _ga_req.Request(), audience=request.base_url)
+    except Exception:
+        logging.warning("[push] Token JWT de Google inválido — acceso denegado")
+        return "Unauthorized", 403
     import base64
     data    = request.get_json(silent=True) or {}
     message = data.get("message", {})
@@ -2299,6 +2311,7 @@ def notificar_obligaciones():
 
 @app.route("/api/subir-factura", methods=["POST"])
 @login_required
+@limiter.limit("20 per minute")
 def subir_factura():
     from datetime import datetime as dt
     archivo = request.files.get("archivo")
