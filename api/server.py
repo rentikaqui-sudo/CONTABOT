@@ -1530,7 +1530,7 @@ def informe_excel(eid):
 
     vs = sb.table("facturas_venta").select(
         "numero,cufe,fecha,cliente_nombre,cliente_nit,subtotal,iva,"
-        "retefuente,reteiva,reteica,total_factura,valor_neto,estado,concepto"
+        "retefuente,reteiva,reteica,total_factura,valor_neto,estado,concepto,tipo_documento"
     ).eq("empresa_id", eid).order("fecha").execute().data
 
     gs = sb.table("facturas_gastos").select(
@@ -1663,12 +1663,14 @@ def informe_excel(eid):
     def cuatri_data(rows, q):
         return [r for r in rows if _cuatrimestre(_mes_num(r["fecha"])) == q]
 
+    def _sgn(r): return -1 if r.get("tipo_documento") == "nota_credito" else 1
+
     conceptos_iva = [
-        ("Base gravable ventas",         lambda q: sum(r["subtotal"] or 0 for r in cuatri_data(vs,q))),
-        ("IVA generado (ventas)",         lambda q: sum(r["iva"] or 0 for r in cuatri_data(vs,q))),
+        ("Base gravable ventas",         lambda q: sum(_sgn(r) * (r["subtotal"] or 0) for r in cuatri_data(vs,q))),
+        ("IVA generado (ventas)",         lambda q: sum(_sgn(r) * (r["iva"] or 0) for r in cuatri_data(vs,q))),
         ("Base gravable compras",         lambda q: sum(r["subtotal"] or 0 for r in cuatri_data(gs,q))),
         ("IVA descontable (compras)",     lambda q: sum(r["iva"] or 0 for r in cuatri_data(gs,q))),
-        ("IVA a pagar (Generado-Desct.)", lambda q: max(0, sum(r["iva"] or 0 for r in cuatri_data(vs,q)) - sum(r["iva"] or 0 for r in cuatri_data(gs,q)))),
+        ("IVA a pagar (Generado-Desct.)", lambda q: max(0, sum(_sgn(r) * (r["iva"] or 0) for r in cuatri_data(vs,q)) - sum(r["iva"] or 0 for r in cuatri_data(gs,q)))),
     ]
     CASILLAS = ["","","","","67"]
     for ri, (concepto, fn) in enumerate(conceptos_iva, 3):
@@ -1714,7 +1716,7 @@ def informe_excel(eid):
 
     def bim_data(rows, b): return [r for r in rows if _bimestre(_mes_num(r["fecha"])) == b]
     TASA_ICA = 4.14 / 1000
-    ica_bases = [round(sum(r["subtotal"] or 0 for r in bim_data(vs, b))) for b in range(1,7)]
+    ica_bases = [round(sum(_sgn(r) * (r["subtotal"] or 0) for r in bim_data(vs, b))) for b in range(1,7)]
     ica_vals  = [round(b * TASA_ICA) for b in ica_bases]
 
     for ri, (label, vals) in enumerate([("Base gravable (ventas)", ica_bases),
