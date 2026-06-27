@@ -4,7 +4,7 @@ Cada contador se registra con email/password y solo ve sus propias empresas.
 Data layer: Supabase (service_role key)
 """
 
-import os, json, functools, re, sys, logging
+import os, json, functools, re, sys, logging, time
 from datetime import date, timedelta, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
@@ -13,6 +13,7 @@ import bcrypt
 from flask import Flask, jsonify, send_from_directory, request, session, redirect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -28,7 +29,7 @@ FACTURAS_DIR = Path(BASE_DIR) / "data" / "facturas_recibidas"
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 sys.path.insert(0, SCRIPTS_DIR)
-from extractor import extraer_xml, extraer_pdf, descomprimir_zip, detectar_empresa, detectar_o_crear_empresa, guardar_empresa_pendiente, guardar_factura, determinar_flujo
+from extractor import extraer_xml, extraer_pdf, descomprimir_zip, detectar_empresa, detectar_o_crear_empresa, guardar_empresa_pendiente, guardar_factura, determinar_flujo, COLORES, ICONOS
 from telegram_notif import notificar_factura, notificar_empresa_desconocida
 from calendario import todas_las_obligaciones, obligaciones_proximas
 
@@ -38,6 +39,7 @@ SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 sb: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = Flask(__name__, static_folder=UI_DIR)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 _flask_secret = os.environ.get("FLASK_SECRET_KEY")
 if not _flask_secret:
     raise RuntimeError("FLASK_SECRET_KEY no configurado. Generá uno con: python -c \"import secrets; print(secrets.token_hex(32))\"")
@@ -79,6 +81,28 @@ def _decrypt_token(token: str) -> str:
         return f.decrypt(token.encode()).decode()
     except Exception:
         return token  # plaintext fallback for tokens stored before encryption was enabled
+
+
+# ── Cache en memoria (TTL 60s por contador) ───────────────────────────────────
+
+_cache: dict = {}
+_CACHE_TTL = 60
+
+def _cache_get(key):
+    if key in _cache:
+        val, ts = _cache[key]
+        if time.time() - ts < _CACHE_TTL:
+            return val
+        del _cache[key]
+    return None
+
+def _cache_set(key, val):
+    _cache[key] = (val, time.time())
+
+def _cache_invalidar(cid):
+    for k in list(_cache.keys()):
+        if k.startswith(f"{cid}:"):
+            del _cache[k]
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -201,6 +225,10 @@ def api_registro():
     email   = (data.get("email") or "").strip().lower()
     password = data.get("password", "")
     nombre  = (data.get("nombre") or "").strip()
+    codigo = (data.get("codigo") or "").strip()
+    beta_code = os.environ.get("BETA_CODE", "")
+    if beta_code and codigo != beta_code:
+        return jsonify({"ok": False, "error": "Código de acceso inválido"}), 403
     if not email or not password or not nombre:
         return jsonify({"ok": False, "error": "Email, contraseña y nombre son requeridos"}), 400
     if len(password) < 8:
@@ -266,7 +294,10 @@ def api_logout():
 @app.route("/api/empresas")
 @login_required
 def empresas():
-    cid = session["contador_id"]
+    cid    = session["contador_id"]
+    cached = _cache_get(f"{cid}:empresas")
+    if cached:
+        return jsonify(cached)
     empresas_rows = sb.table("empresas_clientes").select("*").eq("contador_id", cid).order("id").execute().data
     resultado = []
 
@@ -339,6 +370,7 @@ def empresas():
             "alertas": alertas,
         })
 
+    _cache_set(f"{cid}:empresas", resultado)
     return jsonify(resultado)
 
 
@@ -360,9 +392,6 @@ def crear_empresa():
     if existe:
         return jsonify({"ok": False, "error": f"Ya existe una empresa con NIT {nit}"}), 409
 
-    # Colores e iconos rotativos
-    COLORES = ["#6366f1","#10b981","#f59e0b","#ef4444","#3b82f6","#8b5cf6","#ec4899","#14b8a6"]
-    ICONOS  = ["🏢","🏭","🛒","🏗️","💊","🚛","🍽️","📦","⚙️","🏬"]
     cid     = session["contador_id"]
     count   = len(sb.table("empresas_clientes").select("id").eq("contador_id", cid).execute().data)
     color   = COLORES[count % len(COLORES)]
@@ -382,6 +411,7 @@ def crear_empresa():
         "regimen":      regimen,
     }).execute().data
 
+    _cache_invalidar(cid)
     return jsonify({"ok": True, "empresa": row[0] if row else {}})
 
 
@@ -407,7 +437,10 @@ def editar_empresa(eid):
 @app.route("/api/resumen")
 @login_required
 def resumen():
-    cid         = session["contador_id"]
+    cid    = session["contador_id"]
+    cached = _cache_get(f"{cid}:resumen")
+    if cached:
+        return jsonify(cached)
     empresa_ids = get_user_empresa_ids()
     if not empresa_ids:
         return jsonify({"n_empresas": 0, "total_ventas": 0, "por_cobrar": 0,
@@ -427,7 +460,7 @@ def resumen():
     g_neto       = sum(r["valor_neto"] or 0 for r in gastos_rows)
     g_por_pagar  = sum(r["valor_neto"] or 0 for r in gastos_rows if r["estado"] == "PENDIENTE")
 
-    return jsonify({
+    payload = {
         "n_empresas":      n_empresas,
         "total_ventas":    round(v_neto),
         "por_cobrar":      round(v_por_cobrar),
@@ -437,7 +470,9 @@ def resumen():
         "total_gastos":    round(g_neto),
         "por_pagar":       round(g_por_pagar),
         "total_facturas":  len(ventas_rows) + len(gastos_rows),
-    })
+    }
+    _cache_set(f"{cid}:resumen", payload)
+    return jsonify(payload)
 
 
 # ── Detalle de una empresa ────────────────────────────────────────────────────
@@ -508,16 +543,28 @@ def empresa_dashboard(eid):
 def empresa_ventas(eid):
     err = validate_empresa_ownership(eid)
     if err: return err
-    rows = (
+    per_page = min(int(request.args.get("per_page", 50)), 200)
+    page     = max(int(request.args.get("page", 1)), 1)
+    start    = (page - 1) * per_page
+    result   = (
         sb.table("facturas_venta")
         .select("numero,fecha,fecha_vencimiento,cliente_nombre,cliente_ciudad,"
                 "gran_contribuyente,subtotal,iva,retefuente,reteiva,reteica,"
-                "total_factura,valor_neto,estado")
+                "total_factura,valor_neto,estado,tipo_documento,referencia_nc",
+                count="exact")
         .eq("empresa_id", eid)
         .order("fecha", desc=True)
-        .execute().data
+        .range(start, start + per_page - 1)
+        .execute()
     )
-    return jsonify(rows)
+    total = result.count or 0
+    return jsonify({
+        "data":     result.data,
+        "total":    total,
+        "page":     page,
+        "per_page": per_page,
+        "pages":    max(1, (total + per_page - 1) // per_page),
+    })
 
 
 @app.route("/api/empresa/<int:eid>/facturas/gastos")
@@ -525,16 +572,28 @@ def empresa_ventas(eid):
 def empresa_gastos(eid):
     err = validate_empresa_ownership(eid)
     if err: return err
-    rows = (
+    per_page = min(int(request.args.get("per_page", 50)), 200)
+    page     = max(int(request.args.get("page", 1)), 1)
+    start    = (page - 1) * per_page
+    result   = (
         sb.table("facturas_gastos")
         .select("numero,fecha,fecha_vencimiento,proveedor_nombre,proveedor_ciudad,"
                 "categoria,subtotal,iva,retefuente,reteiva,reteica,"
-                "total_factura,valor_neto,estado,cufe,archivo_pdf")
+                "total_factura,valor_neto,estado,cufe,archivo_pdf,tipo_documento,referencia_nc",
+                count="exact")
         .eq("empresa_id", eid)
         .order("fecha", desc=True)
-        .execute().data
+        .range(start, start + per_page - 1)
+        .execute()
     )
-    return jsonify(rows)
+    total = result.count or 0
+    return jsonify({
+        "data":     result.data,
+        "total":    total,
+        "page":     page,
+        "per_page": per_page,
+        "pages":    max(1, (total + per_page - 1) // per_page),
+    })
 
 
 @app.route("/api/factura/archivo")
@@ -565,7 +624,7 @@ def api_archivos():
     empresas_rows = sb.table("empresas_clientes").select("id,razon_social,nit,color,icono").in_("id", empresa_ids).order("id").execute().data
     facturas_rows = sb.table("facturas_gastos").select(
         "id,numero,fecha,proveedor_nombre,total_factura,cufe,archivo_pdf,empresa_id"
-    ).order("fecha", desc=True).execute().data
+    ).in_("empresa_id", empresa_ids).order("fecha", desc=True).limit(500).execute().data
 
     por_empresa = {}
     for e in empresas_rows:
@@ -610,7 +669,10 @@ def api_archivos():
 def migrate_storage():
     """Migra archivos locales existentes a Supabase Storage."""
     from extractor import subir_a_storage
-    rows = sb.table("facturas_gastos").select("id,numero,fecha,empresa_id,archivo_pdf").execute().data
+    empresa_ids = get_user_empresa_ids()
+    if not empresa_ids:
+        return jsonify({"migrados": 0, "ya_en_storage": 0, "errores": 0})
+    rows = sb.table("facturas_gastos").select("id,numero,fecha,empresa_id,archivo_pdf").in_("empresa_id", empresa_ids).execute().data
     migrados, errores, ya_en_storage = 0, 0, 0
     for r in rows:
         path = r.get("archivo_pdf", "") or ""
@@ -778,7 +840,11 @@ def factura_manual():
     else:
         estado = "PENDIENTE"
 
-    tipo = data.get("tipo", "gasto")
+    tipo    = data.get("tipo", "gasto")
+    numero  = data.get("numero", "")
+    eid_fm  = data.get("empresa_id")
+    tabla_dup = "facturas_gastos" if tipo == "gasto" else "facturas_venta"
+    es_duplicada = bool(sb.table(tabla_dup).select("id").eq("empresa_id", eid_fm).eq("numero", numero).execute().data)
 
     try:
         if tipo == "gasto":
@@ -821,10 +887,11 @@ def factura_manual():
                 "estado":           estado,
                 "archivo_pdf":      "",
             }, on_conflict="empresa_id,numero").execute()
-        return jsonify({"ok": True})
+        _cache_invalidar(session["contador_id"])
+        return jsonify({"ok": True, "duplicada": es_duplicada, "numero": numero})
     except Exception as ex:
         logging.exception('Error en endpoint')
-        return jsonify({"ok": False, "error": "Error interno"}), 400
+        return jsonify({"ok": False, "error": "Error interno"}), 500
 
 
 # ── Procesar imagen de factura (QR / OCR) ────────────────────────────────────
@@ -1179,12 +1246,24 @@ def declaraciones():
     resultado    = []
     total_global = 0
 
+    # Batch: 2 queries para todas las empresas en lugar de 2N
+    emp_ids = [e["id"] for e in emps]
+    if emp_ids:
+        g_all = sb.table("facturas_gastos").select("empresa_id,retefuente,reteiva,reteica").in_("empresa_id", emp_ids).execute().data
+        v_all = sb.table("facturas_venta").select("empresa_id,retefuente,reteiva,reteica").in_("empresa_id", emp_ids).execute().data
+    else:
+        g_all, v_all = [], []
+    g_by_emp = {}
+    v_by_emp = {}
+    for r in g_all: g_by_emp.setdefault(r["empresa_id"], []).append(r)
+    for r in v_all: v_by_emp.setdefault(r["empresa_id"], []).append(r)
+
     for e in emps:
         regimen = e.get("regimen") or "Juridica"
         aplica_rtefte = regimen in ("Juridica", "GranContribuyente")
 
-        g_rows = sb.table("facturas_gastos").select("retefuente,reteiva,reteica").eq("empresa_id", e["id"]).execute().data
-        v_rows = sb.table("facturas_venta" ).select("retefuente,reteiva,reteica").eq("empresa_id", e["id"]).execute().data
+        g_rows = g_by_emp.get(e["id"], [])
+        v_rows = v_by_emp.get(e["id"], [])
 
         rf = round(sum(r["retefuente"] or 0 for r in g_rows)) if aplica_rtefte else 0
         ri = round(sum(r["reteiva"]    or 0 for r in g_rows)) if aplica_rtefte else 0
@@ -1785,6 +1864,8 @@ def marcar_pagada(tipo, numero, eid):
     tabla = "facturas_venta" if tipo == "venta" else "facturas_gastos"
     try:
         sb.table(tabla).update({"estado": "PAGADA"}).eq("numero", numero).eq("empresa_id", eid).execute()
+        _cache_invalidar(session["contador_id"])
+        _cache_invalidar(session["contador_id"])
         return jsonify({"ok": True})
     except Exception as ex:
         logging.exception('Error en endpoint')
@@ -1816,6 +1897,7 @@ def borrar_factura(tipo, numero, eid):
                     sb.storage.from_("facturas").remove([m.group(1)])
             except Exception:
                 pass
+        _cache_invalidar(session["contador_id"])
         return jsonify({"ok": True})
     except Exception as ex:
         logging.exception('Error en endpoint')
@@ -2019,6 +2101,8 @@ def completar_obligacion():
     vencimiento = body.get("vencimiento")
     if not all([empresa_id, tipo, vencimiento]):
         return jsonify({"ok": False, "error": "Faltan campos"}), 400
+    err = validate_empresa_ownership(empresa_id)
+    if err: return err
     try:
         sb.table("obligaciones_completadas").upsert({
             "empresa_id": empresa_id,
@@ -2038,6 +2122,10 @@ def descompletar_obligacion():
     empresa_id  = body.get("empresa_id")
     tipo        = body.get("tipo")
     vencimiento = body.get("vencimiento")
+    if not all([empresa_id, tipo, vencimiento]):
+        return jsonify({"ok": False, "error": "Faltan campos"}), 400
+    err = validate_empresa_ownership(empresa_id)
+    if err: return err
     try:
         sb.table("obligaciones_completadas").delete().eq("empresa_id", empresa_id).eq("tipo", tipo).eq("vencimiento", vencimiento).execute()
         return jsonify({"ok": True})
@@ -2093,7 +2181,8 @@ def asignar_pendiente(pendiente_id):
 @login_required
 def eliminar_pendiente(pendiente_id):
     try:
-        sb.table("empresas_pendientes").delete().eq("id", pendiente_id).execute()
+        cid = session["contador_id"]
+        sb.table("empresas_pendientes").delete().eq("id", pendiente_id).eq("contador_id", cid).execute()
         return jsonify({"ok": True})
     except Exception as e:
         logging.exception('Error en endpoint')
@@ -2249,16 +2338,21 @@ def gmail_push():
     t          = token_row[0]
     empresa_id = t["empresa_id"]
     old_hid    = t.get("history_id", "")
-    try:
-        from gmail_facturas import get_gmail_from_supabase, escanear_desde_history
-        service, _ = get_gmail_from_supabase(empresa_id)
-        if service and old_hid:
-            escanear_desde_history(service, empresa_id, email, old_hid)
-        elif service:
-            from gmail_facturas import escanear_inbox
-            escanear_inbox(empresa_id=empresa_id, max_correos=20, service=service)
-    except Exception as e:
-        logging.exception(f"[push] Error procesando notificación {email}")
+
+    def _procesar():
+        try:
+            from gmail_facturas import get_gmail_from_supabase, escanear_desde_history
+            service, _ = get_gmail_from_supabase(empresa_id)
+            if service and old_hid:
+                escanear_desde_history(service, empresa_id, email, old_hid)
+            elif service:
+                from gmail_facturas import escanear_inbox
+                escanear_inbox(empresa_id=empresa_id, max_correos=20, service=service)
+        except Exception:
+            logging.exception("[push] Error procesando notificación %s", email)
+
+    import threading
+    threading.Thread(target=_procesar, daemon=True).start()
     return "ok", 200
 
 @app.route("/api/gmail/activar-push", methods=["POST"])
@@ -2469,10 +2563,11 @@ def confirmar_factura():
 def telegram_webhook():
     """Recibe callbacks de Telegram (botones inline) y procesa confirmaciones de empresa."""
     tg_secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
-    if tg_secret:
-        received = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-        if received != tg_secret:
-            return "", 403
+    if not tg_secret:
+        return "", 403
+    received = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if received != tg_secret:
+        return "", 403
     update = request.get_json(silent=True) or {}
 
     if "callback_query" not in update:
@@ -2573,8 +2668,6 @@ def telegram_webhook():
                 nombre     = empresa_existente["razon_social"]
             else:
                 import random
-                COLORES = ["#6366f1","#10b981","#f59e0b","#ef4444","#3b82f6","#8b5cf6","#ec4899","#14b8a6"]
-                ICONOS  = ["🏢","🏭","🛒","🏗️","💊","🚛","🍽️","📦","⚙️","🏬"]
                 nueva = sb.table("empresas_clientes").insert({
                     "nit":         nit,
                     "razon_social": nombre,

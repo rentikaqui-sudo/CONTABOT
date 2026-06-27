@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manual de Usuario — ContaBot</title>
+  <style>
+    /* ============================================================
+       VARIABLES Y BASE
+    ============================================================ */
+    :root {
+      --navy: #1a2035;
+      --navy-light: #253152;
+      --orange: #e8533a;
+      --orange-light: #fff3f0;
+      --orange-mid: #fde0da;
+      --gray-100: #f7f8fa;
+      --gray-200: #eef0f4;
+      --gray-400: #9ca3af;
+      --gray-600: #4b5563;
+      --gray-800: #1f2937;
+      --text: #1f2937;
+      --text-light: #4b5563;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 10.5pt;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: var(--text);
+      background: #fff;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ============================================================
+       PRINT
+    ============================================================ */
+    @page {
+      size: A4;
+      margin: 18mm 20mm 20mm 20mm;
+    }
+
+    @media print {
+      body {
+        font-size: 9.5pt;
+      }
+
+      .cover-page {
+        height: 100vh;
+        min-height: unset;
+      }
+
+      .toc-section {
+        page-break-after: always;
+      }
+
+      .main-section {
+        page-break-before: always;
+      }
+
+      a {
+        color: var(--navy) !important;
+        text-decoration: none;
+      }
+
+      .tip-box,
+      .warning-box,
+      .info-box {
+        break-inside: avoid;
+      }
+
+      table {
+        break-inside: avoid;
+      }
+
+      h2, h3 {
+        break-after: avoid;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+
+      .page-header {
+        display: flex;
+      }
+    }
+
+    @media screen {
+      body {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .page-header {
+        display: none;
+      }
+    }
+
+    /* ============================================================
+       ENCABEZADO DE PÁGINA (solo impresión)
+    ============================================================ */
+    .page-header {
+      position: running(header);
+      font-size: 7.5pt;
+      color: var(--gray-400);
+      border-bottom: 1px solid var(--gray-200);
+      padding-bottom: 4px;
+      margin-bottom: 10px;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* ============================================================
+       PORTADA
+    ============================================================ */
+    .cover-page {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 90vh;
+      text-align: center;
+      padding: 60px 40px;
+      background: linear-gradient(160deg, var(--navy) 0%, var(--navy-light) 100%);
+      color: white;
+      border-radius: 4px;
+    }
+
+    @media print {
+      .cover-page {
+        border-radius: 0;
+        margin: -18mm -20mm 0 -20mm;
+        padding: 60px 20mm;
+        width: calc(100% + 40mm);
+      }
+    }
+
+    .logo-circle {
+      width: 80px;
+      height: 80px;
+      background: var(--orange);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28pt;
+      font-weight: 800;
+      color: white;
+      letter-spacing: -1px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(232, 83, 58, 0.4);
+    }
+
+    .cover-brand {
+      font-size: 22pt;
+      font-weight: 700;
+      color: white;
+      letter-spacing: -0.5px;
+      margin-bottom: 4px;
+    }
+
+    .cover-brand span {
+      color: var(--orange);
+    }
+
+    .cover-subtitle {
+      font-size: 11pt;
+      color: rgba(255,255,255,0.65);
+      margin-bottom: 48px;
+      letter-spacing: 0.3px;
+    }
+
+    .cover-title {
+      font-size: 26pt;
+      font-weight: 800;
+      color: white;
+      margin-bottom: 12px;
+      line-height: 1.2;
+    }
+
+    .cover-desc {
+      font-size: 11.5pt;
+      color: rgba(255,255,255,0.72);
+      max-width: 480px;
+      line-height: 1.6;
+      margin-bottom: 56px;
+    }
+
+    .cover-meta {
+      display: flex;
+      gap: 32px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .cover-meta-item {
+      text-align: center;
+    }
+
+    .cover-meta-label {
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 4px;
+    }
+
+    .cover-meta-value {
+      font-size: 10pt;
+      color: rgba(255,255,255,0.85);
+      font-weight: 600;
+    }
+
+    .cover-divider {
+      width: 60px;
+      height: 3px;
+      background: var(--orange);
+      margin: 0 auto 40px;
+      border-radius: 2px;
+    }
+
+    /* ============================================================
+       TABLA DE CONTENIDOS
+    ============================================================ */
+    .toc-section {
+      padding: 48px 0 40px;
+    }
+
+    .toc-section h2 {
+      font-size: 18pt;
+      color: var(--navy);
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .toc-section .section-line {
+      width: 48px;
+      height: 3px;
+      background: var(--orange);
+      border-radius: 2px;
+      margin-bottom: 28px;
+    }
+
+    .toc-list {
+      list-style: none;
+      counter-reset: none;
+    }
+
+    .toc-item {
+      display: flex;
+      align-items: baseline;
+      gap: 0;
+      padding: 7px 0;
+      border-bottom: 1px dashed var(--gray-200);
+    }
+
+    .toc-item:last-child {
+      border-bottom: none;
+    }
+
+    .toc-num {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: var(--orange);
+      min-width: 28px;
+    }
+
+    .toc-item a {
+      font-size: 10.5pt;
+      color: var(--navy);
+      text-decoration: none;
+      flex: 1;
+      font-weight: 500;
+    }
+
+    .toc-item a:hover {
+      color: var(--orange);
+    }
+
+    .toc-dots {
+      flex: 1;
+      border-bottom: 1px dotted var(--gray-400);
+      margin: 0 8px 3px;
+      min-width: 20px;
+    }
+
+    .toc-page {
+      font-size: 9pt;
+      color: var(--gray-400);
+      min-width: 20px;
+      text-align: right;
+    }
+
+    .toc-sub {
+      padding-left: 28px;
+    }
+
+    .toc-sub .toc-num {
+      font-size: 8.5pt;
+      color: var(--gray-400);
+      font-weight: 600;
+    }
+
+    .toc-sub a {
+      font-size: 9.5pt;
+      font-weight: 400;
+      color: var(--gray-600);
+    }
+
+    /* ============================================================
+       SECCIONES PRINCIPALES
+    ============================================================ */
+    .main-section {
+      padding: 48px 0 32px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .section-num {
+      font-size: 11pt;
+      font-weight: 800;
+      color: var(--orange);
+      background: var(--orange-light);
+      border: 2px solid var(--orange-mid);
+      border-radius: 8px;
+      padding: 6px 12px;
+      line-height: 1;
+      white-space: nowrap;
+      margin-top: 4px;
+    }
+
+    .section-header-text h2 {
+      font-size: 18pt;
+      font-weight: 800;
+      color: var(--navy);
+      line-height: 1.15;
+      margin-bottom: 4px;
+    }
+
+    .section-header-text p {
+      font-size: 10pt;
+      color: var(--text-light);
+    }
+
+    .section-line {
+      width: 48px;
+      height: 3px;
+      background: var(--orange);
+      border-radius: 2px;
+      margin: 0 0 28px 0;
+    }
+
+    /* ============================================================
+       TIPOGRAFÍA CONTENIDO
+    ============================================================ */
+    h3 {
+      font-size: 12.5pt;
+      font-weight: 700;
+      color: var(--navy);
+      margin: 24px 0 10px;
+      padding-bottom: 5px;
+      border-bottom: 2px solid var(--gray-200);
+    }
+
+    h4 {
+      font-size: 10.5pt;
+      font-weight: 700;
+      color: var(--navy-light);
+      margin: 18px 0 8px;
+    }
+
+    p {
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    ul, ol {
+      margin: 8px 0 14px 20px;
+    }
+
+    li {
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    li strong {
+      color: var(--navy);
+    }
+
+    code {
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 9pt;
+      background: var(--gray-100);
+      border: 1px solid var(--gray-200);
+      border-radius: 4px;
+      padding: 1px 6px;
+      color: var(--orange);
+    }
+
+    a {
+      color: var(--orange);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    strong {
+      font-weight: 700;
+    }
+
+    /* ============================================================
+       CAJAS DE NOTA / TIP / WARNING
+    ============================================================ */
+    .tip-box {
+      background: var(--orange-light);
+      border-left: 4px solid var(--orange);
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      margin: 16px 0;
+    }
+
+    .tip-box .tip-label {
+      font-size: 8pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--orange);
+      margin-bottom: 5px;
+    }
+
+    .tip-box p {
+      margin: 0;
+      font-size: 9.5pt;
+      color: var(--gray-800);
+    }
+
+    .info-box {
+      background: #f0f4ff;
+      border-left: 4px solid #4a6cf7;
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      margin: 16px 0;
+    }
+
+    .info-box .tip-label {
+      font-size: 8pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #4a6cf7;
+      margin-bottom: 5px;
+    }
+
+    .info-box p {
+      margin: 0;
+      font-size: 9.5pt;
+      color: var(--gray-800);
+    }
+
+    .warning-box {
+      background: #fffbf0;
+      border-left: 4px solid #d97706;
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      margin: 16px 0;
+    }
+
+    .warning-box .tip-label {
+      font-size: 8pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #d97706;
+      margin-bottom: 5px;
+    }
+
+    .warning-box p {
+      margin: 0;
+      font-size: 9.5pt;
+      color: var(--gray-800);
+    }
+
+    /* ============================================================
+       TABLAS
+    ============================================================ */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 20px;
+      font-size: 9.5pt;
+    }
+
+    th {
+      background: var(--navy);
+      color: white;
+      padding: 9px 14px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 8.5pt;
+      letter-spacing: 0.3px;
+    }
+
+    td {
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--gray-200);
+      color: var(--text);
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) td {
+      background: var(--gray-100);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* ============================================================
+       PASOS NUMERADOS
+    ============================================================ */
+    .steps {
+      list-style: none;
+      margin: 12px 0 20px;
+      padding: 0;
+      counter-reset: steps;
+    }
+
+    .steps li {
+      counter-increment: steps;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .steps li::before {
+      content: counter(steps);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 26px;
+      height: 26px;
+      background: var(--orange);
+      color: white;
+      border-radius: 50%;
+      font-size: 9pt;
+      font-weight: 800;
+      margin-top: 1px;
+      flex-shrink: 0;
+    }
+
+    .steps li span {
+      padding-top: 3px;
+    }
+
+    /* ============================================================
+       CREDENCIALES / BADGE
+    ============================================================ */
+    .credential-box {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 8px;
+      background: var(--gray-100);
+      border: 1px solid var(--gray-200);
+      border-radius: 10px;
+      padding: 16px 24px;
+      margin: 12px 0;
+    }
+
+    .credential-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .credential-label {
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--gray-400);
+      min-width: 80px;
+      font-weight: 600;
+    }
+
+    .credential-value {
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 11pt;
+      font-weight: 700;
+      color: var(--navy);
+      background: white;
+      border: 1px solid var(--gray-200);
+      border-radius: 6px;
+      padding: 4px 12px;
+    }
+
+    /* ============================================================
+       URL BADGE
+    ============================================================ */
+    .url-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--navy);
+      color: white;
+      border-radius: 24px;
+      padding: 8px 18px;
+      font-size: 9.5pt;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      margin: 10px 0;
+    }
+
+    .url-badge span {
+      font-size: 7.5pt;
+      color: rgba(255,255,255,0.55);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-family: -apple-system, sans-serif;
+      font-weight: 600;
+    }
+
+    /* ============================================================
+       FAQ
+    ============================================================ */
+    .faq-item {
+      border: 1px solid var(--gray-200);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .faq-question {
+      background: var(--gray-100);
+      padding: 12px 16px;
+      font-weight: 700;
+      font-size: 10pt;
+      color: var(--navy);
+    }
+
+    .faq-question::before {
+      content: "P: ";
+      color: var(--orange);
+    }
+
+    .faq-answer {
+      padding: 12px 16px;
+      font-size: 9.5pt;
+      color: var(--text);
+      border-top: 1px solid var(--gray-200);
+    }
+
+    .faq-answer::before {
+      content: "R: ";
+      font-weight: 700;
+      color: var(--navy-light);
+    }
+
+    /* ============================================================
+       SECCIÓN SOPORTE
+    ============================================================ */
+    .support-cards {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin: 20px 0;
+    }
+
+    .support-card {
+      flex: 1;
+      min-width: 160px;
+      border: 1px solid var(--gray-200);
+      border-radius: 10px;
+      padding: 18px;
+      text-align: center;
+    }
+
+    .support-card .support-icon {
+      font-size: 22pt;
+      margin-bottom: 8px;
+    }
+
+    .support-card .support-label {
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--gray-400);
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+
+    .support-card .support-value {
+      font-size: 10pt;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    /* ============================================================
+       PIE DE DOCUMENTO
+    ============================================================ */
+    .doc-footer {
+      margin-top: 48px;
+      padding-top: 20px;
+      border-top: 2px solid var(--gray-200);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 8pt;
+      color: var(--gray-400);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .doc-footer strong {
+      color: var(--navy);
+    }
+
+    /* ============================================================
+       CHIPS / TAGS
+    ============================================================ */
+    .chip {
+      display: inline-block;
+      font-size: 8pt;
+      font-weight: 700;
+      padding: 2px 9px;
+      border-radius: 20px;
+      vertical-align: middle;
+      margin: 0 2px;
+    }
+
+    .chip-orange {
+      background: var(--orange-light);
+      color: var(--orange);
+      border: 1px solid var(--orange-mid);
+    }
+
+    .chip-navy {
+      background: #eef1f8;
+      color: var(--navy);
+      border: 1px solid #d0d8ee;
+    }
+
+    .chip-green {
+      background: #f0fdf4;
+      color: #16a34a;
+      border: 1px solid #bbf7d0;
+    }
+
+    .chip-red {
+      background: #fff1f2;
+      color: #dc2626;
+      border: 1px solid #fecdd3;
+    }
+
+    /* ============================================================
+       DIVISOR
+    ============================================================ */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--gray-200);
+      margin: 28px 0;
+    }
+
+    /* ============================================================
+       FLUJO AUTOMÁTICO (iconos de pasos)
+    ============================================================ */
+    .flow-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 16px 0 20px;
+      position: relative;
+    }
+
+    .flow-step {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      padding: 12px 0;
+      position: relative;
+    }
+
+    .flow-step-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--orange);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14pt;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .flow-step-content {
+      padding-top: 6px;
+    }
+
+    .flow-step-title {
+      font-weight: 700;
+      font-size: 10pt;
+      color: var(--navy);
+      margin-bottom: 2px;
+    }
+
+    .flow-step-desc {
+      font-size: 9.5pt;
+      color: var(--text-light);
+    }
+
+    .flow-step:not(:last-child) .flow-step-icon::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      height: calc(100% + 12px);
+      background: var(--orange-mid);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================
+       PORTADA
+  ============================================================ -->
+  <div class="cover-page">
+    <div class="logo-circle">CA</div>
+    <div class="cover-brand">Conta<span>Bot</span></div>
+    <div class="cover-subtitle">Estudio Contable Aristizábal &amp; Asociados</div>
+    <div class="cover-divider"></div>
+    <div class="cover-title">Manual de Usuario</div>
+    <p class="cover-desc">
+      Guía completa para gestionar facturas electrónicas, declaraciones y obligaciones tributarias colombianas desde un solo panel.
+    </p>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">Versión</div>
+        <div class="cover-meta-value">1.0 — 2026</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">Para</div>
+        <div class="cover-meta-value">Contador &amp; Equipo</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">URL</div>
+        <div class="cover-meta-value">contabot-demo-production.up.railway.app</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">Fecha</div>
+        <div class="cover-meta-value">Junio 2026</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       TABLA DE CONTENIDOS
+  ============================================================ -->
+  <div class="toc-section" id="toc">
+    <h2>Tabla de Contenidos</h2>
+    <div class="section-line"></div>
+    <ul class="toc-list">
+      <li class="toc-item">
+        <span class="toc-num">1.</span>
+        <a href="#seccion-1">¿Qué es ContaBot?</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">2</span>
+      </li>
+      <li class="toc-item">
+        <span class="toc-num">2.</span>
+        <a href="#seccion-2">Acceso al sistema</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">3</span>
+      </li>
+      <li class="toc-item">
+        <span class="toc-num">3.</span>
+        <a href="#seccion-3">Secciones del Dashboard</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">4</span>
+      </li>
+      <li class="toc-item toc-sub">
+        <span class="toc-num">3.1</span>
+        <a href="#sec-3-1">Empresas (página de inicio)</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">4</span>
+      </li>
+      <li class="toc-item toc-sub">
+        <span class="toc-num">3.2</span>
+        <a href="#sec-3-2">Dentro de cada empresa</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">4</span>
+      </li>
+      <li class="toc-item toc-sub">
+        <span class="toc-num">3.3</span>
+        <a href="#sec-3-3">Alertas globales</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">5</span>
+      </li>
+      <li class="toc-item toc-sub">
+        <span class="toc-num">3.4</span>
+        <a href="#sec-3-4">Ingresar Factura (manual)</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">5</span>
+      </li>
+      <li class="toc-item toc-sub">
+        <span class="toc-num">3.5</span>
+        <a href="#sec-3-5">Subir Factura (XML / PDF / ZIP)</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">5</span>
+      </li>
+      <li class="toc-item toc-sub">
+        <span class="toc-num">3.6</span>
+        <a href="#sec-3-6">Bandeja Pendiente</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">6</span>
+      </li>
+      <li class="toc-item toc-sub">
+        <span class="toc-num">3.7</span>
+        <a href="#sec-3-7">Archivos</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">6</span>
+      </li>
+      <li class="toc-item toc-sub">
+        <span class="toc-num">3.8</span>
+        <a href="#sec-3-8">Declaraciones</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">6</span>
+      </li>
+      <li class="toc-item toc-sub">
+        <span class="toc-num">3.9</span>
+        <a href="#sec-3-9">Calendario tributario</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">7</span>
+      </li>
+      <li class="toc-item">
+        <span class="toc-num">4.</span>
+        <a href="#seccion-4">Gmail automático</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">8</span>
+      </li>
+      <li class="toc-item">
+        <span class="toc-num">5.</span>
+        <a href="#seccion-5">Bot de Telegram</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">9</span>
+      </li>
+      <li class="toc-item">
+        <span class="toc-num">6.</span>
+        <a href="#seccion-6">Gestión de empresas y facturas</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">10</span>
+      </li>
+      <li class="toc-item">
+        <span class="toc-num">7.</span>
+        <a href="#seccion-7">Conciliación con la DIAN</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">11</span>
+      </li>
+      <li class="toc-item">
+        <span class="toc-num">8.</span>
+        <a href="#seccion-8">Preguntas frecuentes</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">12</span>
+      </li>
+      <li class="toc-item">
+        <span class="toc-num">9.</span>
+        <a href="#seccion-9">Soporte</a>
+        <span class="toc-dots"></span>
+        <span class="toc-page">13</span>
+      </li>
+    </ul>
+  </div>
+
+  <!-- ============================================================
+       SECCIÓN 1 — ¿Qué es ContaBot?
+  ============================================================ -->
+  <div class="main-section" id="seccion-1">
+    <div class="section-header">
+      <div class="section-num">01</div>
+      <div class="section-header-text">
+        <h2>¿Qué es ContaBot?</h2>
+        <p>Una herramienta de automatización contable diseñada para Colombia</p>
+      </div>
+    </div>
+
+    <p>
+      <strong>ContaBot</strong> es un asistente digital que automatiza las tareas más repetitivas del trabajo contable colombiano: recibir facturas electrónicas, extraer sus datos, calcular retenciones y hacer seguimiento de obligaciones tributarias.
+    </p>
+
+    <p>
+      Está construido específicamente para el sistema fiscal colombiano: IVA, Retefuente, ReteIVA, ReteICA, CUFE DIAN, NIT, y fechas de obligaciones del calendario tributario nacional.
+    </p>
+
+    <h3>¿Qué hace ContaBot por usted?</h3>
+
+    <table>
+      <tr>
+        <th>Tarea</th>
+        <th>Sin ContaBot</th>
+        <th>Con ContaBot</th>
+      </tr>
+      <tr>
+        <td>Recibir facturas por correo</td>
+        <td>Revisar manualmente cada correo, descargar adjuntos, digitar datos</td>
+        <td>Automático — extrae y registra sin intervención</td>
+      </tr>
+      <tr>
+        <td>Verificar facturas en DIAN</td>
+        <td>Entrar al portal DIAN una por una</td>
+        <td>Clic en el CUFE naranja → abre la factura en DIAN</td>
+      </tr>
+      <tr>
+        <td>Calcular retenciones</td>
+        <td>Hojas de cálculo manuales</td>
+        <td>Cálculo automático por empresa y período</td>
+      </tr>
+      <tr>
+        <td>Seguimiento de cartera</td>
+        <td>Revisar fechas manualmente</td>
+        <td>Alertas automáticas por Telegram</td>
+      </tr>
+      <tr>
+        <td>Calendario obligaciones</td>
+        <td>Revisar el calendario DIAN cada mes</td>
+        <td>Panel visual con recordatorios por celular</td>
+      </tr>
+    </table>
+
+    <h3>Lo que ContaBot NO hace</h3>
+    <ul>
+      <li>No <strong>emite</strong> facturas electrónicas (para eso use Siigo, Alegra u otro software DIAN). ContaBot <em>recibe</em> y <em>procesa</em>.</li>
+      <li>No reemplaza a Siigo ni a ningún sistema de contabilidad — los <strong>complementa</strong>.</li>
+      <li>No hace contabilidad de causación ni libros contables oficiales.</li>
+    </ul>
+
+    <div class="info-box">
+      <div class="tip-label">Filosofia</div>
+      <p>ContaBot está diseñado para ahorrar tiempo en las tareas de captura y seguimiento, para que el contador pueda dedicarse a lo que realmente requiere criterio profesional.</p>
+    </div>
+
+    <h3>URL de acceso</h3>
+    <div class="url-badge">
+      <span>URL</span>
+      contabot-demo-production.up.railway.app
+    </div>
+
+    <p style="margin-top: 12px; font-size: 9.5pt; color: var(--text-light);">
+      Funciona desde cualquier navegador moderno (Chrome, Edge, Firefox) en computador o celular. No requiere instalación.
+    </p>
+  </div>
+
+  <!-- ============================================================
+       SECCIÓN 2 — Acceso
+  ============================================================ -->
+  <div class="main-section" id="seccion-2">
+    <div class="section-header">
+      <div class="section-num">02</div>
+      <div class="section-header-text">
+        <h2>Acceso al sistema</h2>
+        <p>Credenciales y manejo de sesión</p>
+      </div>
+    </div>
+
+    <p>Para ingresar a ContaBot, abra el navegador y vaya a la URL indicada. Verá una pantalla de inicio de sesión.</p>
+
+    <h3>Credenciales de acceso</h3>
+
+    <div class="credential-box">
+      <div class="credential-row">
+        <div class="credential-label">Usuario</div>
+        <div class="credential-value">contador</div>
+      </div>
+      <div class="credential-row">
+        <div class="credential-label">Contraseña</div>
+        <div class="credential-value">contabot2026</div>
+      </div>
+    </div>
+
+    <div class="warning-box">
+      <div class="tip-label">Seguridad</div>
+      <p>No comparta estas credenciales con terceros. Si necesita agregar un colaborador, contacte al administrador para crear un acceso independiente.</p>
+    </div>
+
+    <h3>Duración de la sesión</h3>
+    <ul>
+      <li>La sesión se mantiene activa durante <strong>8 horas</strong> desde el último inicio de sesión.</li>
+      <li>Pasado ese tiempo, el sistema pedirá que inicie sesión de nuevo — esto es normal y esperado.</li>
+      <li>Si cierra el navegador y vuelve a abrir, puede que la sesión siga activa (depende del navegador).</li>
+    </ul>
+
+    <div class="tip-box">
+      <div class="tip-label">Consejo</div>
+      <p>Si ve una pantalla en blanco o el dashboard no carga correctamente, cierre sesión (botón en la esquina superior derecha) y vuelva a ingresar. Esto resuelve la mayoría de los problemas visuales.</p>
+    </div>
+
+    <h3>Acceso desde el celular</h3>
+    <p>
+      ContaBot funciona desde el navegador del celular. Abra Chrome o Safari, vaya a la URL y el panel se adapta automáticamente a la pantalla. Para mayor comodidad, puede guardar el sitio en la pantalla de inicio (opción "Agregar a pantalla de inicio" en Chrome).
+    </p>
+  </div>
+
+  <!-- ============================================================
+       SECCIÓN 3 — Dashboard
+  ============================================================ -->
+  <div class="main-section" id="seccion-3">
+    <div class="section-header">
+      <div class="section-num">03</div>
+      <div class="section-header-text">
+        <h2>Secciones del Dashboard</h2>
+        <p>Guía de cada pantalla y sus funciones</p>
+      </div>
+    </div>
+
+    <p>
+      Al iniciar sesión verá el panel principal con todas las empresas registradas y acceso a todas las funciones desde el menú lateral o la barra superior.
+    </p>
+
+    <!-- 3.1 -->
+    <h3 id="sec-3-1">3.1 Empresas — Página de inicio</h3>
+
+    <p>
+      La pantalla principal muestra una tarjeta por cada empresa cliente registrada. Cada tarjeta incluye el nombre, NIT, régimen tributario y los principales indicadores del período actual.
+    </p>
+
+    <p><strong>KPIs consolidados que verá en cada tarjeta:</strong></p>
+    <ul>
+      <li><strong>Total facturado:</strong> suma de todas las facturas de venta emitidas</li>
+      <li><strong>Cartera vencida:</strong> facturas de clientes sin pagar pasada la fecha de vencimiento</li>
+      <li><strong>Total gastos:</strong> suma de facturas de proveedores recibidas en el período</li>
+    </ul>
+
+    <p>Haga clic en una empresa para ver su detalle completo con todas las pestañas disponibles.</p>
+
+    <div class="tip-box">
+      <div class="tip-label">Consejo</div>
+      <p>Las tarjetas con cartera vencida aparecen resaltadas. Revise primero esas empresas para gestionar cobros pendientes.</p>
+    </div>
+
+    <!-- 3.2 -->
+    <h3 id="sec-3-2">3.2 Dentro de cada empresa</h3>
+
+    <p>Al entrar a una empresa encontrará pestañas con todas las funciones disponibles para esa empresa:</p>
+
+    <h4>Gastos (facturas recibidas)</h4>
+    <p>Lista de todas las facturas de proveedores recibidas. Columnas principales:</p>
+    <ul>
+      <li><strong>CUFE:</strong> código único DIAN — haga clic en el texto naranja para verificar la factura en el portal oficial</li>
+      <li><strong>Proveedor / NIT:</strong> datos del emisor de la factura</li>
+      <li><strong>Montos:</strong> subtotal, IVA, retenciones y total pagado</li>
+      <li><strong>Estado:</strong> <span class="chip chip-green">PAGADA</span> o <span class="chip chip-orange">PENDIENTE</span></li>
+      <li><strong>Botón "✓ Pagada":</strong> haga clic para marcar la factura como pagada cuando realice el pago al proveedor</li>
+    </ul>
+
+    <h4>Ventas (facturas emitidas)</h4>
+    <p>Lista de facturas emitidas a clientes. Estados posibles:</p>
+    <ul>
+      <li><span class="chip chip-green">PENDIENTE</span> — dentro del plazo</li>
+      <li><span class="chip chip-orange">POR VENCER</span> — vence en los próximos 5 días</li>
+      <li><span class="chip chip-red">VENCIDA</span> — pasó la fecha de vencimiento sin pago</li>
+    </ul>
+
+    <h4>Alertas</h4>
+    <p>
+      Muestra las facturas vencidas o próximas a vencer con un <strong>preview del email de cobro</strong> listo para enviar. El sistema genera automáticamente el texto del correo con los datos de la factura.
+    </p>
+
+    <h4>Retenciones</h4>
+    <p>
+      Resumen del período actual con los totales de:
+    </p>
+    <ul>
+      <li><strong>Retefuente:</strong> retención en la fuente practicada y soportada</li>
+      <li><strong>ReteIVA:</strong> retención de IVA (aplica a grandes contribuyentes)</li>
+      <li><strong>ReteICA:</strong> retención de industria y comercio (Bogotá: 4.14‰)</li>
+    </ul>
+
+    <h4>Flujo de Caja</h4>
+    <p>
+      Gráfico mensual que muestra ingresos (ventas), gastos (compras) y el neto mes a mes. Útil para visualizar la situación financiera de la empresa de un vistazo.
+    </p>
+
+    <h4>Conciliar DIAN</h4>
+    <p>
+      Permite subir el Excel descargado del portal DIAN y compararlo contra las facturas registradas en ContaBot. El sistema detecta automáticamente qué facturas están en la DIAN pero aún no están en ContaBot. Ver sección 7 para el proceso completo.
+    </p>
+
+    <div class="tip-box">
+      <div class="tip-label">Recomendacion</div>
+      <p>Haga la conciliación DIAN al menos una vez por mes, preferiblemente antes de presentar las declaraciones. Esto garantiza que no se le escape ninguna factura de proveedor.</p>
+    </div>
+
+    <!-- 3.3 -->
+    <h3 id="sec-3-3">3.3 Alertas Globales</h3>
+
+    <p>
+      Desde el menú lateral, la opción <strong>"Alertas"</strong> muestra en una sola pantalla las alertas de <em>todas</em> las empresas registradas — facturas vencidas y próximas a vencer sin importar la empresa.
+    </p>
+
+    <ul>
+      <li>Filtre por empresa específica usando el selector en la parte superior</li>
+      <li>Filtre por estado: vencidas / por vencer / todas</li>
+      <li>Desde aquí puede ir directamente al detalle de cada factura</li>
+    </ul>
+
+    <!-- 3.4 -->
+    <h3 id="sec-3-4">3.4 Ingresar Factura (manual)</h3>
+
+    <p>
+      Use esta opción cuando tenga una factura en papel, o una factura electrónica que no llegó por correo y no tiene el archivo XML o PDF disponible.
+    </p>
+
+    <ol class="steps">
+      <li><span>En el menú lateral, haga clic en <strong>"Ingresar Factura"</strong></span></li>
+      <li><span>Seleccione la empresa a la que pertenece la factura</span></li>
+      <li><span>Seleccione el tipo: <strong>Gasto</strong> (factura de proveedor) o <strong>Venta</strong> (factura a cliente)</span></li>
+      <li><span>Complete el formulario: número de factura, fecha, NIT del proveedor o cliente, montos</span></li>
+      <li><span>Ingrese las retenciones si aplican (Retefuente, ReteIVA, ReteICA)</span></li>
+      <li><span>Haga clic en <strong>"Guardar"</strong></span></li>
+    </ol>
+
+    <div class="info-box">
+      <div class="tip-label">Nota</div>
+      <p>Las facturas ingresadas manualmente quedan registradas igual que las automáticas, pero no tienen archivo adjunto. Si posteriormente consigue el PDF o XML, puede borrala y subirla por "Subir Factura" para tener el archivo asociado.</p>
+    </div>
+
+    <!-- 3.5 -->
+    <h3 id="sec-3-5">3.5 Subir Factura (XML / PDF / ZIP)</h3>
+
+    <p>
+      Use esta opción cuando tenga el archivo de la factura electrónica DIAN (XML, PDF o ZIP) y quiera registrarla en ContaBot con extracción automática de datos.
+    </p>
+
+    <ol class="steps">
+      <li><span>En el menú, haga clic en <strong>"Subir Factura"</strong></span></li>
+      <li><span>Arrastre el archivo al área indicada, o haga clic para seleccionarlo</span></li>
+      <li><span>ContaBot extrae automáticamente: número, fecha, NIT, CUFE, subtotal, IVA, retenciones y total</span></li>
+      <li><span>Revise los datos extraídos en la vista previa</span></li>
+      <li><span>Seleccione a qué empresa pertenece (si no se detectó automáticamente)</span></li>
+      <li><span>Haga clic en <strong>"Confirmar y guardar"</strong></span></li>
+    </ol>
+
+    <p><strong>Tipos de archivo admitidos:</strong></p>
+
+    <table>
+      <tr>
+        <th>Formato</th>
+        <th>Descripción</th>
+        <th>Precisión de extracción</th>
+      </tr>
+      <tr>
+        <td><code>.xml</code></td>
+        <td>XML UBL DIAN — formato estándar de factura electrónica</td>
+        <td>Alta — extrae todos los campos incluyendo CUFE</td>
+      </tr>
+      <tr>
+        <td><code>.pdf</code></td>
+        <td>PDF de representación gráfica de la factura</td>
+        <td>Media — extrae la mayoría de los datos</td>
+      </tr>
+      <tr>
+        <td><code>.zip</code></td>
+        <td>ZIP con XML y/o PDF adentro (formato común del correo DIAN)</td>
+        <td>Alta — descomprime y usa el XML interno</td>
+      </tr>
+    </table>
+
+    <div class="warning-box">
+      <div class="tip-label">Importante</div>
+      <p>Si la empresa no está registrada en ContaBot, el sistema enviará una notificación por Telegram pidiendo que asigne la factura. Mientras tanto, la factura queda en la "Bandeja Pendiente".</p>
+    </div>
+
+    <!-- 3.6 -->
+    <h3 id="sec-3-6">3.6 Bandeja Pendiente</h3>
+
+    <p>
+      Cuando ContaBot procesa una factura (por correo automático o por carga manual) y <strong>no puede determinar a qué empresa pertenece</strong>, la envía a la Bandeja Pendiente en lugar de registrarla con empresa incorrecta.
+    </p>
+
+    <ul>
+      <li>Verá una lista de facturas pendientes de asignación</li>
+      <li>Para cada una, seleccione la empresa correcta en el desplegable</li>
+      <li>Haga clic en <strong>"Confirmar"</strong> para que la factura quede registrada en esa empresa</li>
+      <li>También puede hacer clic en <strong>"Descartar"</strong> si la factura no corresponde a ninguna empresa registrada</li>
+    </ul>
+
+    <div class="tip-box">
+      <div class="tip-label">Consejo</div>
+      <p>Revise la Bandeja Pendiente al menos una vez por semana. Las facturas sin asignar no aparecen en los reportes de gastos ni en las declaraciones.</p>
+    </div>
+
+    <!-- 3.7 -->
+    <h3 id="sec-3-7">3.7 Archivos</h3>
+
+    <p>
+      Repositorio centralizado de todos los archivos de facturas (XML, PDF) almacenados en la nube (Supabase Storage), organizados por empresa y mes.
+    </p>
+
+    <ul>
+      <li><strong>Filtro por empresa:</strong> seleccione una empresa para ver solo sus archivos</li>
+      <li><strong>Filtro por mes:</strong> seleccione el mes y año del período</li>
+      <li><strong>Botón ⬇:</strong> descarga el archivo XML o PDF original al computador</li>
+      <li><strong>Botón 🔗 DIAN:</strong> abre el portal DIAN directamente con esa factura para verificar su validez</li>
+    </ul>
+
+    <div class="info-box">
+      <div class="tip-label">Almacenamiento</div>
+      <p>Los archivos están en la nube y no dependen de ningún computador local. Estarán disponibles siempre, desde cualquier dispositivo con acceso a ContaBot.</p>
+    </div>
+
+    <!-- 3.8 -->
+    <h3 id="sec-3-8">3.8 Declaraciones</h3>
+
+    <p>
+      Pre-liquidación de las principales obligaciones tributarias, calculada automáticamente a partir de las facturas registradas.
+    </p>
+
+    <table>
+      <tr>
+        <th>Declaración</th>
+        <th>Formulario DIAN</th>
+        <th>Qué calcula</th>
+      </tr>
+      <tr>
+        <td>IVA</td>
+        <td>F-300</td>
+        <td>IVA generado en ventas menos IVA descontable en compras</td>
+      </tr>
+      <tr>
+        <td>Retefuente</td>
+        <td>F-350</td>
+        <td>Retenciones practicadas a proveedores en el período</td>
+      </tr>
+      <tr>
+        <td>ICA</td>
+        <td>Formulario de la ciudad</td>
+        <td>Impuesto de industria y comercio por ciudad</td>
+      </tr>
+    </table>
+
+    <ul>
+      <li>Filtre por empresa y período (bimestre o mes)</li>
+      <li>Vea el desglose por tarifa y base gravable</li>
+      <li>Botón <strong>"Exportar a Excel"</strong> para descargar el resumen en formato compatible con los formularios DIAN</li>
+    </ul>
+
+    <div class="warning-box">
+      <div class="tip-label">Atencion</div>
+      <p>Los valores calculados por ContaBot son una pre-liquidación de referencia basada en las facturas registradas. La liquidación definitiva y la presentación de las declaraciones deben ser verificadas y firmadas por el contador responsable.</p>
+    </div>
+
+    <!-- 3.9 -->
+    <h3 id="sec-3-9">3.9 Calendario Tributario</h3>
+
+    <p>
+      Panel visual con todas las fechas de obligaciones tributarias del año 2026, organizado por empresa y tipo de obligación.
+    </p>
+
+    <ul>
+      <li><strong>IVA F-300:</strong> bimestral o cuatrimestral según el régimen</li>
+      <li><strong>Retefuente F-350:</strong> mensual</li>
+      <li><strong>ICA:</strong> bimestral (Bogotá y otras ciudades)</li>
+      <li><strong>Renta:</strong> fecha de vencimiento por NIT</li>
+    </ul>
+
+    <p><strong>Filtros disponibles:</strong></p>
+    <ul>
+      <li>Por empresa — ver solo las obligaciones de una empresa</li>
+      <li>Por tipo — solo IVA, solo Retefuente, etc.</li>
+      <li>Por estado — <span class="chip chip-green">REALIZADA</span> / <span class="chip chip-orange">PENDIENTE</span> / <span class="chip chip-red">VENCIDA</span></li>
+    </ul>
+
+    <p>
+      Al hacer clic en una obligación puede marcarla como <strong>realizada</strong> con la fecha de presentación.
+    </p>
+
+    <div class="tip-box">
+      <div class="tip-label">Telegram</div>
+      <p>Use el botón <strong>"Enviar a Telegram"</strong> para recibir en el celular un resumen de las obligaciones próximas a vencer. Ideal para no perder fechas importantes.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SECCIÓN 4 — Gmail Automático
+  ============================================================ -->
+  <div class="main-section" id="seccion-4">
+    <div class="section-header">
+      <div class="section-num">04</div>
+      <div class="section-header-text">
+        <h2>Gmail Automático</h2>
+        <p>Cómo ContaBot procesa las facturas que llegan por correo</p>
+      </div>
+    </div>
+
+    <p>
+      Cuando el correo Gmail de una empresa está conectado a ContaBot, el sistema monitorea en tiempo real los correos entrantes. Cada vez que llega un correo con un adjunto de factura electrónica, ContaBot lo procesa automáticamente sin que usted tenga que hacer nada.
+    </p>
+
+    <h3>Flujo de procesamiento automático</h3>
+
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-step-icon">✉</div>
+        <div class="flow-step-content">
+          <div class="flow-step-title">Llega la factura al correo</div>
+          <div class="flow-step-desc">El proveedor envía la factura electrónica DIAN al correo de la empresa</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-step-icon">🔍</div>
+        <div class="flow-step-content">
+          <div class="flow-step-title">ContaBot detecta el adjunto</div>
+          <div class="flow-step-desc">En segundos, identifica el archivo adjunto (PDF, XML o ZIP)</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-step-icon">⚙</div>
+        <div class="flow-step-content">
+          <div class="flow-step-title">Extrae los datos automáticamente</div>
+          <div class="flow-step-desc">Número, fecha, NIT del proveedor, CUFE, montos, IVA y retenciones</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-step-icon">💾</div>
+        <div class="flow-step-content">
+          <div class="flow-step-title">Guarda la factura</div>
+          <div class="flow-step-desc">Registra los datos en ContaBot y sube el archivo original a la nube</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-step-icon">📱</div>
+        <div class="flow-step-content">
+          <div class="flow-step-title">Notifica por Telegram</div>
+          <div class="flow-step-desc">Envía un mensaje con el resumen de la factura procesada</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Tipos de archivo que procesa</h3>
+
+    <table>
+      <tr>
+        <th>Tipo</th>
+        <th>Qué extrae</th>
+        <th>Precisión</th>
+      </tr>
+      <tr>
+        <td><strong>XML UBL DIAN</strong></td>
+        <td>CUFE, número, montos exactos, NIT, nombre del proveedor, fecha, retenciones</td>
+        <td>Alta — datos directos del estándar DIAN</td>
+      </tr>
+      <tr>
+        <td><strong>PDF</strong></td>
+        <td>Número, fecha, montos, NIT — por reconocimiento de texto</td>
+        <td>Media — depende del formato del PDF</td>
+      </tr>
+      <tr>
+        <td><strong>ZIP</strong></td>
+        <td>Descomprime el ZIP, extrae el XML o PDF que contiene y lo procesa</td>
+        <td>Alta si el ZIP contiene XML</td>
+      </tr>
+    </table>
+
+    <h3>Renovación del acceso Gmail (token)</h3>
+
+    <p>Google requiere que el acceso a cada cuenta de Gmail se renueve periódicamente. ContaBot hace esto automático:</p>
+
+    <ol class="steps">
+      <li><span><strong>ContaBot detecta</strong> que el acceso de una empresa lleva 6 días activo y te envía un aviso por Telegram con un botón de renovación.</span></li>
+      <li><span><strong>Recibes el mensaje</strong> en Telegram: <em>"⚠️ Token Gmail por vencer — [Empresa]"</em> con un link directo.</span></li>
+      <li><span><strong>Tocas el link</strong> — se abre el navegador, Google te pide confirmar los permisos (pantalla de autorización).</span></li>
+      <li><span><strong>Haces clic en Permitir</strong> — ContaBot guarda el nuevo token automáticamente. Listo en menos de 30 segundos.</span></li>
+    </ol>
+
+    <div class="tip-box">
+      <div class="tip-label">Importante</div>
+      <p>El aviso llega el <strong>día 6 de 7</strong> para darte tiempo de renovar antes de que venza. Si no renuevas a tiempo, las facturas dejan de llegar automáticamente hasta que lo hagas — pero puedes seguir subiéndolas manualmente desde <strong>"Subir Factura"</strong>.</p>
+    </div>
+
+    <h3>Si el correo no llega automáticamente</h3>
+
+    <ol class="steps">
+      <li><span>Revisa si llegó un aviso de token por Telegram — es la causa más común.</span></li>
+      <li><span>Si el token está vigente, usa <strong>"Subir Factura"</strong> para cargarlo manualmente — el sistema lo procesa igual y lo guarda en Archivos.</span></li>
+      <li><span>Si el problema persiste, contacta al administrador (ver sección Soporte).</span></li>
+    </ol>
+
+    <div class="info-box">
+      <div class="tip-label">Sistema Push</div>
+      <p>ContaBot usa notificaciones Push de Gmail (no revisa el correo cada cierto tiempo). Esto significa que el procesamiento ocurre en segundos desde que llega el correo, sin demoras.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SECCIÓN 5 — Bot de Telegram
+  ============================================================ -->
+  <div class="main-section" id="seccion-5">
+    <div class="section-header">
+      <div class="section-num">05</div>
+      <div class="section-header-text">
+        <h2>Bot de Telegram</h2>
+        <p>Notificaciones y alertas en tiempo real en su celular</p>
+      </div>
+    </div>
+
+    <p>
+      ContaBot incluye un bot de Telegram que envía notificaciones automáticas al celular del contador. No necesita abrir el panel para enterarse de lo que ocurre — el bot lo avisa en tiempo real.
+    </p>
+
+    <h3>Notificaciones que envía ContaBot</h3>
+
+    <table>
+      <tr>
+        <th>Evento</th>
+        <th>Qué dice el mensaje</th>
+      </tr>
+      <tr>
+        <td>Nueva factura procesada</td>
+        <td>Número de factura, nombre del proveedor, monto total, empresa asignada</td>
+      </tr>
+      <tr>
+        <td>Empresa no reconocida</td>
+        <td>Datos de la factura + botones para asignarla a una empresa</td>
+      </tr>
+      <tr>
+        <td>Obligaciones próximas</td>
+        <td>Resumen de vencimientos tributarios de los próximos días</td>
+      </tr>
+      <tr>
+        <td>Token Gmail por vencer</td>
+        <td>Aviso 24 horas antes de que expire la conexión Gmail</td>
+      </tr>
+      <tr>
+        <td>Factura vencida</td>
+        <td>Alerta de cartera vencida con nombre del cliente y monto</td>
+      </tr>
+    </table>
+
+    <h3>Cómo responder al bot</h3>
+
+    <p>
+      Cuando llega una factura de una empresa que ContaBot no reconoce, el bot envía el mensaje con <strong>botones interactivos</strong> que muestran las empresas registradas. Solo toque el botón de la empresa correcta — la factura queda asignada de inmediato.
+    </p>
+
+    <div class="tip-box">
+      <div class="tip-label">No se necesitan comandos</div>
+      <p>El bot opera completamente por botones. No necesita escribir ningún comando de texto — solo responder a los botones que aparecen en los mensajes.</p>
+    </div>
+
+    <h3>Si no llegan las notificaciones</h3>
+
+    <ul>
+      <li>Verifique que haya iniciado conversación con el bot en Telegram (busque <strong>@ContaBotDIAN_bot</strong> o el nombre indicado por el administrador).</li>
+      <li>El bot solo envía mensajes — no recibe comandos de texto externos.</li>
+      <li>Si bloqueó accidentalmente el bot en Telegram, desbloquéelo desde el perfil del bot.</li>
+      <li>Verifique que las notificaciones de Telegram no estén silenciadas en su celular.</li>
+    </ul>
+
+    <div class="info-box">
+      <div class="tip-label">Consejo</div>
+      <p>Active las notificaciones de Telegram para el bot como "prioritarias" en su celular, para que suenen siempre, incluso en modo silencio. Así no perderá alertas de vencimientos importantes.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SECCIÓN 6 — Gestión de Empresas y Facturas
+  ============================================================ -->
+  <div class="main-section" id="seccion-6">
+    <div class="section-header">
+      <div class="section-num">06</div>
+      <div class="section-header-text">
+        <h2>Gestión de Empresas y Facturas</h2>
+        <p>Agregar, editar y eliminar empresas y documentos</p>
+      </div>
+    </div>
+
+    <h3>Agregar una nueva empresa</h3>
+
+    <ol class="steps">
+      <li><span>En la página de inicio, haga clic en el botón <strong>"+ Nueva Empresa"</strong> (esquina superior derecha)</span></li>
+      <li><span>Complete el formulario con los datos de la empresa:
+        <ul style="margin-top: 6px;">
+          <li><strong>NIT:</strong> con dígito de verificación (ej. 900.456.789-3)</li>
+          <li><strong>Razón social:</strong> nombre completo como aparece en el RUT</li>
+          <li><strong>Ciudad:</strong> ciudad principal de operación</li>
+          <li><strong>Sector:</strong> actividad económica principal</li>
+          <li><strong>Régimen tributario:</strong> Ordinario, Gran Contribuyente, etc.</li>
+        </ul>
+      </span></li>
+      <li><span>Haga clic en <strong>"Guardar"</strong>. La empresa aparecerá en el panel principal.</span></li>
+    </ol>
+
+    <div class="tip-box">
+      <div class="tip-label">Tip</div>
+      <p>Registre el NIT exactamente como está en el RUT, incluyendo el dígito de verificación. ContaBot usa el NIT para reconocer automáticamente a qué empresa pertenecen las facturas que llegan por correo.</p>
+    </div>
+
+    <h3>Borrar una empresa</h3>
+
+    <p>Para eliminar una empresa del sistema:</p>
+    <ol class="steps">
+      <li><span>Haga clic en el menú <strong>"⋯"</strong> de la tarjeta de la empresa (o el ícono de eliminar)</span></li>
+      <li><span>Seleccione <strong>"Eliminar empresa"</strong></span></li>
+      <li><span>Lea con atención la confirmación — se indica cuántas facturas se borrarán</span></li>
+      <li><span>Escriba el nombre de la empresa para confirmar y haga clic en <strong>"Eliminar definitivamente"</strong></span></li>
+    </ol>
+
+    <div class="warning-box">
+      <div class="tip-label">Advertencia</div>
+      <p>Eliminar una empresa borra la empresa Y todas sus facturas, archivos y datos asociados. Esta acción NO se puede deshacer. Si tiene dudas, contacte al administrador antes de proceder.</p>
+    </div>
+
+    <h3>Borrar una factura individual</h3>
+
+    <ol class="steps">
+      <li><span>Entre a la empresa y vaya a la pestaña <strong>Gastos</strong> o <strong>Ventas</strong></span></li>
+      <li><span>Al final de la fila de la factura, haga clic en el ícono de eliminar (🗑)</span></li>
+      <li><span>Confirme la eliminación en el cuadro de diálogo</span></li>
+    </ol>
+
+    <h3>Editar una factura</h3>
+
+    <p>
+      Por el momento, ContaBot no tiene un editor directo de facturas. Si un dato fue capturado incorrectamente:
+    </p>
+    <ol>
+      <li>Borre la factura incorrecta</li>
+      <li>Vuelva a subirla por <strong>"Subir Factura"</strong> si tiene el archivo</li>
+      <li>O ingrésela de nuevo por <strong>"Ingresar Factura"</strong> con los datos correctos</li>
+    </ol>
+  </div>
+
+  <!-- ============================================================
+       SECCIÓN 7 — Conciliación DIAN
+  ============================================================ -->
+  <div class="main-section" id="seccion-7">
+    <div class="section-header">
+      <div class="section-num">07</div>
+      <div class="section-header-text">
+        <h2>Conciliación con la DIAN</h2>
+        <p>Verificar que todas las facturas del portal DIAN estén en ContaBot</p>
+      </div>
+    </div>
+
+    <p>
+      La DIAN mantiene un registro oficial de todas las facturas electrónicas emitidas a nombre de cada empresa. ContaBot permite comparar ese registro oficial contra las facturas que tiene registradas, para detectar cualquier factura que haya llegado directamente al portal DIAN pero no a ContaBot.
+    </p>
+
+    <h3>Paso a paso</h3>
+
+    <ol class="steps">
+      <li><span>
+        <strong>Descargue el Excel del portal DIAN:</strong><br>
+        Vaya a <code>catalogo-vpfe.dian.gov.co</code> → inicie sesión con el RUT de la empresa → vaya a <strong>"Facturas Recibidas"</strong> → exporte a Excel
+      </span></li>
+      <li><span>
+        <strong>Abra ContaBot:</strong><br>
+        Entre a la empresa correspondiente → pestaña <strong>"Conciliar DIAN"</strong>
+      </span></li>
+      <li><span>
+        <strong>Suba el Excel:</strong><br>
+        Arrastre el archivo descargado al área indicada o haga clic para seleccionarlo
+      </span></li>
+      <li><span>
+        <strong>Revise el resultado:</strong><br>
+        ContaBot muestra una tabla con las facturas que están en DIAN pero NO en ContaBot
+      </span></li>
+      <li><span>
+        <strong>Registre las faltantes:</strong><br>
+        Haga clic en <strong>"Registrar todas"</strong> para importar todas las facturas faltantes de una vez
+      </span></li>
+    </ol>
+
+    <div class="tip-box">
+      <div class="tip-label">Recomendacion mensual</div>
+      <p>Haga este proceso al cierre de cada bimestre, antes de preparar la declaración de IVA. Así garantiza que todos los gastos de proveedores estén incluidos correctamente.</p>
+    </div>
+
+    <h3>Verificar un CUFE individual</h3>
+
+    <p>Para verificar la validez de una factura específica en el portal DIAN:</p>
+
+    <ul>
+      <li>En la tabla de <strong>Gastos</strong>, haga clic en el código naranja de la columna CUFE</li>
+      <li>También desde la sección <strong>Archivos</strong>, use el botón <strong>"🔗 DIAN"</strong> de cada archivo</li>
+    </ul>
+
+    <p>Ambas opciones abren el portal oficial DIAN con esa factura directamente, para que pueda verificar que el CUFE es válido y la factura está aceptada.</p>
+
+    <div class="info-box">
+      <div class="tip-label">Que es el CUFE</div>
+      <p>El CUFE (Código Único de Factura Electrónica) es un hash SHA-384 de 96 caracteres que identifica de forma única cada factura electrónica en el sistema DIAN. Es el equivalente a un número de serie oficial que garantiza la autenticidad del documento.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SECCIÓN 8 — FAQ
+  ============================================================ -->
+  <div class="main-section" id="seccion-8">
+    <div class="section-header">
+      <div class="section-num">08</div>
+      <div class="section-header-text">
+        <h2>Preguntas Frecuentes</h2>
+        <p>Respuestas a las dudas más comunes</p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-question">¿Qué pasa si subo una factura dos veces?</div>
+      <div class="faq-answer">ContaBot detecta el duplicado automáticamente usando el CUFE y el número de factura. Si la factura ya existe en el sistema, muestra un aviso y NO la registra de nuevo. No hay riesgo de duplicados en los reportes.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-question">¿Puedo usar ContaBot con varias empresas al mismo tiempo?</div>
+      <div class="faq-answer">Sí. ContaBot está diseñado específicamente para manejar múltiples empresas desde un solo panel. Desde la página de inicio puede ver todas las empresas registradas y acceder a cada una con un clic. Los reportes y declaraciones se calculan de forma independiente por empresa.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-question">¿Dónde se guardan los archivos de las facturas?</div>
+      <div class="faq-answer">En Supabase Storage (servicio de almacenamiento en la nube). Los archivos no dependen de ningún computador local — están disponibles siempre desde cualquier dispositivo con acceso a ContaBot. Si se cambia el servidor, los archivos permanecen intactos.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-question">¿ContaBot genera facturas electrónicas para enviar a clientes?</div>
+      <div class="faq-answer">No. ContaBot recibe y procesa facturas, pero no las emite. Para generar facturas electrónicas habilitadas por la DIAN, use Siigo, Alegra, Factura1 u otro software de facturación electrónica DIAN. ContaBot y esas herramientas se complementan.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-question">¿Qué pasa con las facturas en papel?</div>
+      <div class="faq-answer">Use "Ingresar Factura" para registrarlas manualmente con los datos del documento físico. No hay extracción automática desde papel. Se recomienda solicitar siempre la versión electrónica a los proveedores.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-question">¿Cada cuánto se revisa el correo electrónico?</div>
+      <div class="faq-answer">En tiempo real. ContaBot usa el sistema Push de la API de Gmail, lo que significa que cuando llega un correo con adjunto, el sistema lo recibe en segundos (no hay intervalo de revisión). No es polling — es notificación instantánea.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-question">¿Los cálculos de retenciones son definitivos?</div>
+      <div class="faq-answer">No. Los cálculos son una pre-liquidación de referencia basada en las facturas registradas. La verificación final y la firma de las declaraciones son responsabilidad del contador. ContaBot facilita el trabajo previo, pero no reemplaza el criterio profesional.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-question">¿Qué pasa si el proveedor no envía XML, solo PDF?</div>
+      <div class="faq-answer">ContaBot puede extraer datos de PDF usando reconocimiento de texto. La precisión es alta para PDFs bien formateados, pero puede variar. Se recomienda solicitar siempre el XML UBL DIAN a los proveedores, ya que es el formato oficial y la extracción es completa y exacta.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-question">¿Puedo exportar los datos para llevarlos a Siigo o Excel?</div>
+      <div class="faq-answer">Sí. Desde la sección "Declaraciones" puede exportar el resumen de retenciones e IVA a Excel. Para exportar la lista completa de facturas, use los filtros de cada empresa y descargue desde la tabla correspondiente.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-question">¿ContaBot cumple con la normativa DIAN?</div>
+      <div class="faq-answer">ContaBot procesa facturas electrónicas en formato UBL 2.1 según el estándar DIAN, verifica CUFEs y respeta la estructura de retenciones del sistema tributario colombiano (IVA 19%/5%/0%, Retefuente, ReteIVA, ReteICA). Sin embargo, no es un operador de facturación DIAN — es una herramienta de gestión contable.</div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SECCIÓN 9 — Soporte
+  ============================================================ -->
+  <div class="main-section" id="seccion-9">
+    <div class="section-header">
+      <div class="section-num">09</div>
+      <div class="section-header-text">
+        <h2>Soporte</h2>
+        <p>Cómo contactar al administrador para dudas y solicitudes</p>
+      </div>
+    </div>
+
+    <p>
+      Para dudas, reportes de errores, solicitudes de cambio o eliminación de datos, contacte al administrador por cualquiera de los siguientes medios:
+    </p>
+
+    <div class="support-cards">
+      <div class="support-card">
+        <div class="support-icon">📱</div>
+        <div class="support-label">WhatsApp / Telegram</div>
+        <div class="support-value">[Número del administrador]</div>
+      </div>
+      <div class="support-card">
+        <div class="support-icon">✉</div>
+        <div class="support-label">Correo electrónico</div>
+        <div class="support-value">[Email del administrador]</div>
+      </div>
+    </div>
+
+    <h3>Tipos de solicitudes de soporte</h3>
+
+    <table>
+      <tr>
+        <th>Solicitud</th>
+        <th>Cómo pedirla</th>
+      </tr>
+      <tr>
+        <td>Error o comportamiento inesperado</td>
+        <td>Describa lo que pasó, en qué empresa y cuándo. Adjunte captura de pantalla si es posible.</td>
+      </tr>
+      <tr>
+        <td>Borrar una empresa y sus datos</td>
+        <td>Indique el NIT y la razón social de la empresa a eliminar</td>
+      </tr>
+      <tr>
+        <td>Agregar un nuevo usuario o colaborador</td>
+        <td>Indique nombre, cargo y correo de la persona</td>
+      </tr>
+      <tr>
+        <td>Conectar un nuevo correo Gmail</td>
+        <td>Indique la empresa y el correo Gmail a conectar</td>
+      </tr>
+      <tr>
+        <td>Exportación masiva de datos</td>
+        <td>Indique empresa, período y formato deseado</td>
+      </tr>
+    </table>
+
+    <div class="tip-box">
+      <div class="tip-label">Privacidad de datos</div>
+      <p>Para solicitar la eliminación de datos de una empresa o sus facturas, el administrador verificará su identidad antes de proceder. Tenga a mano el NIT y razón social de la empresa.</p>
+    </div>
+
+    <h3>Antes de contactar soporte — revisiones básicas</h3>
+
+    <ul>
+      <li>Si el panel no carga: cierre sesión y vuelva a entrar (ver sección 2)</li>
+      <li>Si una factura no aparece: revise la Bandeja Pendiente (sección 3.6)</li>
+      <li>Si no llegan notificaciones Telegram: verifique que no haya bloqueado el bot</li>
+      <li>Si el procesamiento de correos se detuvo: verifique el estado de la conexión Gmail en Configuración</li>
+    </ul>
+  </div>
+
+  <!-- ============================================================
+       PIE DE DOCUMENTO
+  ============================================================ -->
+  <div class="doc-footer">
+    <div>
+      <strong>ContaBot</strong> — Estudio Contable Aristizábal &amp; Asociados
+    </div>
+    <div>
+      Manual de Usuario v1.0 &nbsp;·&nbsp; Junio 2026
+    </div>
+    <div>
+      contabot-demo-production.up.railway.app
+    </div>
+  </div>
+
+</body>
+</html>

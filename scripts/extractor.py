@@ -3,7 +3,7 @@ extractor.py — Extrae datos de facturas electrónicas DIAN (XML UBL, PDF, ZIP)
 Importado por gmail_facturas.py y server.py.
 """
 
-import os, re, zipfile, tempfile
+import os, re, zipfile, tempfile, logging
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -56,7 +56,7 @@ def descomprimir_zip(data: bytes, destino: Path) -> list:
                 archivos.append(destino / nombre)
         os.unlink(tmp_path)
     except Exception as e:
-        print(f"Error descomprimiendo ZIP: {e}")
+        logging.exception("Error descomprimiendo ZIP")
     archivos.sort(key=lambda p: 0 if p.suffix.lower() == ".xml" else 1)
     return archivos
 
@@ -131,7 +131,7 @@ def _extraer_documento_embebido(outer_root) -> "tuple[ET.Element, str] | tuple[N
                         inner = ET.fromstring(texto)
                         return _strip_ns(inner), tipo_doc
                     except Exception as e:
-                        print(f"Error parseando {tipo_doc} embebido: {e}")
+                        logging.warning("Error parseando %s embebido: %s", tipo_doc, e)
     return None, "factura"
 
 
@@ -139,7 +139,7 @@ def extraer_xml(path: str) -> dict | None:
     try:
         raw_root = ET.parse(path).getroot()
     except Exception as e:
-        print(f"Error XML: {e}")
+        logging.exception("Error XML")
         return None
 
     # Detectar AttachedDocument DIAN y extraer documento interno (Invoice/CreditNote/DebitNote)
@@ -348,13 +348,13 @@ def guardar_factura(datos: dict, empresa_id: int, empresa_nit: str,
 
 def extraer_pdf(path: str) -> dict | None:
     if not _FITZ:
-        print("PyMuPDF no disponible: pip install pymupdf")
+        logging.warning("PyMuPDF no disponible: pip install pymupdf")
         return None
     try:
         with fitz.open(path) as doc:
             text = "\n".join(p.get_text() for p in doc)
     except Exception as e:
-        print(f"Error PDF: {e}")
+        logging.exception("Error PDF")
         return None
 
     def parse_monto(s):
@@ -491,7 +491,7 @@ def subir_a_storage(ruta_local: str, empresa_id: int, numero: str, fecha: str, s
         url = sb.storage.from_("facturas").get_public_url(storage_path)
         return url
     except Exception as e:
-        print(f"Error subiendo a Storage: {e}")
+        logging.exception("Error subiendo a Storage")
         return None
 
 
@@ -516,5 +516,5 @@ def guardar_empresa_pendiente(datos: dict, fuente: str, sb, contador_id=None) ->
         res = sb.table("empresas_pendientes").insert(row).execute()
         return res.data[0]["id"] if res.data else None
     except Exception as e:
-        print(f"Error guardando empresa pendiente: {e}")
+        logging.exception("Error guardando empresa pendiente")
         return None

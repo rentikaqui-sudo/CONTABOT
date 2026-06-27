@@ -11,6 +11,7 @@ data/*.db
 # Credenciales OAuth Google (NUNCA subir)
 data/gmail_credentials.json
 data/gmail_token.json
+client_secret_*.json
 
 # Facturas y archivos de clientes reales
 data/facturas_recibidas/
@@ -24,9 +25,14 @@ data/remitentes_facturas.json
 
 # ZIPs de facturas
 *.zip
+data/samples/
 
 # Excel con datos reales
 *.xlsx
 
+# Grafos de conocimiento (generados)
+graphify-out/
+
 # Archivos temporales
 .claude/scheduled_tasks.lock
+.claude/worktrees/

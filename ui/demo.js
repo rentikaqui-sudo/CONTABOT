@@ -79,6 +79,8 @@ async function confirmarBorrarFactura(tipo, numero, eid, btn) {
       if (data.ok) {
         const row = btn.closest('tr');
         if (row) row.remove();
+        Object.keys(ventasEmpresaData).filter(k => k.startsWith(`${eid}_`)).forEach(k => delete ventasEmpresaData[k]);
+        Object.keys(gastosEmpresaData).filter(k => k.startsWith(`${eid}_`)).forEach(k => delete gastosEmpresaData[k]);
       } else {
         showToast('Error al eliminar: ' + data.error, 'error');
       }
@@ -125,12 +127,20 @@ const CATS = {
 
 function navTo(id, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    b.classList.remove('active');
+    b.removeAttribute('aria-current');
+  });
   document.getElementById('section-' + id).classList.add('active');
-  if (btn) btn.classList.add('active');
-  else {
+  if (btn) {
+    btn.classList.add('active');
+    btn.setAttribute('aria-current', 'page');
+  } else {
     document.querySelectorAll('.nav-btn').forEach(b => {
-      if (b.dataset.section === id) b.classList.add('active');
+      if (b.dataset.section === id) {
+        b.classList.add('active');
+        b.setAttribute('aria-current', 'page');
+      }
     });
   }
   if (id === 'alertas')       loadAlertasGlobal();
@@ -175,7 +185,7 @@ async function loadInicio() {
     <div class="kpi-card">
       <div class="kpi-label">Empresas Gestionadas</div>
       <div class="kpi-value">${resumen.n_empresas}</div>
-      <div class="kpi-sub">${resumen.total_facturas} facturas en total</div>
+      <div class="kpi-sub">${resumen.total_facturas ?? 0} facturas en total</div>
     </div>
     <div class="kpi-card green">
       <div class="kpi-label">Total Facturado (clientes)</div>
@@ -205,6 +215,9 @@ async function loadInicio() {
 
     const card = document.createElement('div');
     card.className = 'empresa-card';
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', e.razon_social);
     card.style.setProperty('--empresa-color', e.color);
     card.style.cssText += `--empresa-color:${e.color};`;
     card.style.animationDelay = `${i * 0.07}s`;
@@ -251,6 +264,7 @@ async function loadInicio() {
       </div>
     `;
     card.onclick = () => abrirEmpresa(e);
+    card.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); abrirEmpresa(e); } };
     grid.appendChild(card);
   });
 }
@@ -259,6 +273,9 @@ async function loadInicio() {
 
 async function abrirEmpresa(empresa) {
   empresaActual = empresa;
+  // Resetear páginas al cambiar de empresa
+  ventasPagina[empresa.id] = 1;
+  gastosPagina[empresa.id] = 1;
 
   // Mostrar tab empresa en nav
   const navEmpresa = document.getElementById('nav-empresa');
@@ -315,16 +332,45 @@ function volverAClientes() {
 // ── Ventas de empresa ─────────────────────────────────────────────────────────
 
 let ventasEmpresaData = {};
+let ventasPagina = {};
 
-async function loadVentasEmpresa(eid) {
-  if (ventasEmpresaData[eid]) { renderVentas(ventasEmpresaData[eid]); return; }
-  const data = await fetch(`/api/empresa/${eid}/facturas/venta`).then(r => r.json());
-  ventasEmpresaData[eid] = data;
-  renderVentas(data);
+async function loadVentasEmpresa(eid, page) {
+  page = page || ventasPagina[eid] || 1;
+  ventasPagina[eid] = page;
+  const cacheKey = `${eid}_p${page}`;
+  const tbody = document.getElementById('tbody-ventas-e');
+  if (ventasEmpresaData[cacheKey]) {
+    renderVentas(ventasEmpresaData[cacheKey].data);
+    renderPaginacion('paginacion-ventas', eid, ventasEmpresaData[cacheKey], loadVentasEmpresa);
+    return;
+  }
+  tbody.innerHTML = '<tr><td colspan="13" class="muted" style="text-align:center;padding:1.5rem">Cargando...</td></tr>';
+  let resp;
+  try {
+    resp = await fetch(`/api/empresa/${eid}/facturas/venta?page=${page}&per_page=50`).then(r => r.json());
+  } catch {
+    tbody.innerHTML = '<tr><td colspan="13" class="muted" style="text-align:center">Error cargando facturas. Recargue la página.</td></tr>';
+    return;
+  }
+  ventasEmpresaData[cacheKey] = resp;
+  renderVentas(resp.data);
+  renderPaginacion('paginacion-ventas', eid, resp, loadVentasEmpresa);
+}
+
+function renderPaginacion(containerId, eid, resp, loadFn) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!resp || resp.pages <= 1) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = `
+    <button class="pag-btn" ${resp.page <= 1 ? 'disabled' : ''} onclick="${loadFn.name}(${eid},${resp.page-1})">← Anterior</button>
+    <span class="pag-info">Página ${resp.page} de ${resp.pages} · <b>${resp.total}</b> facturas</span>
+    <button class="pag-btn" ${resp.page >= resp.pages ? 'disabled' : ''} onclick="${loadFn.name}(${eid},${resp.page+1})">Siguiente →</button>
+  `;
 }
 
 function renderVentas(data) {
-  document.getElementById('badge-ventas-e').textContent = data.length + ' facturas';
+  document.getElementById('badge-ventas-e').textContent = (data ? data.length : 0) + ' en página';
   const tbody = document.getElementById('tbody-ventas-e');
   tbody.innerHTML = '';
   data.forEach((f, i) => {
@@ -384,10 +430,12 @@ async function runFlujoA() {
     await sleep(350);
   }
 
-  delete ventasEmpresaData[empresaActual.id];
-  const data = await fetch(`/api/empresa/${empresaActual.id}/facturas/venta`).then(r => r.json());
-  ventasEmpresaData[empresaActual.id] = data;
-  document.getElementById('badge-ventas-e').textContent = data.length + ' facturas';
+  // Limpiar cache de ventas para forzar recarga
+  Object.keys(ventasEmpresaData).filter(k => k.startsWith(`${empresaActual.id}_`)).forEach(k => delete ventasEmpresaData[k]);
+  const resp = await fetch(`/api/empresa/${empresaActual.id}/facturas/venta?page=1&per_page=50`).then(r => r.json());
+  const data = resp.data || [];
+  ventasEmpresaData[`${empresaActual.id}_p1`] = resp;
+  document.getElementById('badge-ventas-e').textContent = (resp.total || data.length) + ' facturas';
 
   for (let i = 0; i < data.length; i++) {
     label.textContent = `Registrando ${i + 1}/${data.length}: ${data[i].numero} — ${data[i].cliente_nombre}`;
@@ -418,9 +466,33 @@ async function runFlujoA() {
 
 // ── Gastos de empresa ─────────────────────────────────────────────────────────
 
-async function loadGastosEmpresa(eid) {
-  const data = await fetch(`/api/empresa/${eid}/facturas/gastos`).then(r => r.json());
-  document.getElementById('badge-gastos-e').textContent = data.length + ' facturas';
+const gastosEmpresaData = {};
+let gastosPagina = {};
+
+async function loadGastosEmpresa(eid, page) {
+  page = page || gastosPagina[eid] || 1;
+  gastosPagina[eid] = page;
+  const cacheKey = `${eid}_p${page}`;
+  const tbody = document.getElementById('tbody-gastos-e');
+  if (gastosEmpresaData[cacheKey]) {
+    renderGastos(gastosEmpresaData[cacheKey].data);
+    renderPaginacion('paginacion-gastos', eid, gastosEmpresaData[cacheKey], loadGastosEmpresa);
+    return;
+  }
+  tbody.innerHTML = '<tr><td colspan="14" class="muted" style="text-align:center;padding:1.5rem">Cargando...</td></tr>';
+  let resp;
+  try {
+    resp = await fetch(`/api/empresa/${eid}/facturas/gastos?page=${page}&per_page=50`).then(r => r.json());
+  } catch {
+    tbody.innerHTML = '<tr><td colspan="14" class="muted" style="text-align:center">Error cargando gastos. Recargue la página.</td></tr>';
+    return;
+  }
+  gastosEmpresaData[cacheKey] = resp;
+  renderGastos(resp.data);
+  renderPaginacion('paginacion-gastos', eid, resp, loadGastosEmpresa);
+}
+function renderGastos(data) {
+  document.getElementById('badge-gastos-e').textContent = (data ? data.length : 0) + ' en página';
   const tbody = document.getElementById('tbody-gastos-e');
   tbody.innerHTML = '';
   data.forEach((f, i) => {
@@ -460,9 +532,13 @@ async function loadGastosEmpresa(eid) {
 // ── Alertas de empresa ────────────────────────────────────────────────────────
 
 async function loadAlertasEmpresa(eid) {
-  const data = await fetch(`/api/empresa/${eid}/alertas`).then(r => r.json());
-  document.getElementById('badge-alertas-e').textContent = data.length;
-  renderAlertasCards(data, 'alertas-empresa-lista', true);
+  try {
+    const data = await fetch(`/api/empresa/${eid}/alertas`).then(r => r.json());
+    document.getElementById('badge-alertas-e').textContent = data.length;
+    renderAlertasCards(data, 'alertas-empresa-lista', true);
+  } catch(e) {
+    document.getElementById('alertas-empresa-lista').innerHTML = '<p style="color:var(--red);padding:.75rem">Error al cargar alertas</p>';
+  }
 }
 
 async function runEmailsEmpresa() {
@@ -536,6 +612,7 @@ async function runEmailsGlobal() {
 // ── Retenciones empresa ───────────────────────────────────────────────────────
 
 async function loadRetencionesEmpresa(eid) {
+  try {
   const [dash, porCliente] = await Promise.all([
     fetch(`/api/empresa/${eid}/dashboard`).then(r => r.json()),
     fetch(`/api/empresa/${eid}/retenciones-por-cliente`).then(r => r.json()),
@@ -599,6 +676,9 @@ async function loadRetencionesEmpresa(eid) {
       </div>
     </div>
   `;
+  } catch(e) {
+    document.getElementById('retenciones-empresa-contenido').innerHTML = '<p style="color:var(--red);padding:.75rem">Error al cargar retenciones</p>';
+  }
 }
 
 // ── Alertas cards helper ──────────────────────────────────────────────────────
@@ -824,16 +904,22 @@ async function submitFacturaManual(e) {
     const data = await res.json();
 
     if (data.ok) {
-      // Invalidar cache de ventas/gastos
       ventasEmpresaData = {};
-      // Mostrar confirmación
+      gastosEmpresaData = {};
       document.getElementById('fm-layout') && (document.querySelector('.fm-layout').style.display = 'none');
       document.querySelector('.fm-header').style.display = 'none';
       const conf = document.getElementById('fm-confirmacion');
       conf.style.display = 'block';
-      document.getElementById('fm-conf-sub').innerHTML =
-        `Factura <b>${payload.numero}</b> registrada para <b>${document.getElementById('fm-empresa').options[document.getElementById('fm-empresa').selectedIndex].text}</b>.<br>
-         Neto: <b>${COP(neto)}</b> COP · Retenciones calculadas automaticamente.`;
+      const empresaNombre = document.getElementById('fm-empresa').options[document.getElementById('fm-empresa').selectedIndex].text;
+      if (data.duplicada) {
+        document.getElementById('fm-conf-sub').innerHTML =
+          `La factura <b>${esc(payload.numero)}</b> ya estaba registrada en <b>${esc(empresaNombre)}</b>.<br>Los datos fueron actualizados.`;
+        showToast(`Factura ${payload.numero} ya existía — datos actualizados`, 'info');
+      } else {
+        document.getElementById('fm-conf-sub').innerHTML =
+          `Factura <b>${esc(payload.numero)}</b> registrada para <b>${esc(empresaNombre)}</b>.<br>
+           Neto: <b>${COP(neto)}</b> COP · Retenciones calculadas automáticamente.`;
+      }
     }
   } catch(err) {
     showToast('Error al registrar. Verifique que el servidor está corriendo.', 'error');
@@ -998,7 +1084,7 @@ async function cargarPendientes() {
   vacio.style.display = 'none';
 
   const res = await fetch('/api/pendientes').then(r => r.json());
-  if (!res.ok) { lista.innerHTML = `<p style="color:red">${res.error}</p>`; return; }
+  if (!res.ok) { lista.innerHTML = `<p style="color:red">${esc(res.error)}</p>`; return; }
 
   const { pendientes, empresas } = res;
 
@@ -1254,7 +1340,7 @@ async function dianProcesar(file) {
     const data = await res.json();
 
     if (!data.ok) {
-      area.innerHTML = `<div class="li-upload-icon">❌</div><div class="li-upload-text" style="color:var(--red)">${data.error}</div><button class="li-select-btn" onclick="initDian()">Intentar de nuevo</button>`;
+      area.innerHTML = `<div class="li-upload-icon">❌</div><div class="li-upload-text" style="color:var(--red)">${esc(data.error)}</div><button class="li-select-btn" onclick="initDian()">Intentar de nuevo</button>`;
       return;
     }
 
@@ -1425,13 +1511,17 @@ function renderCalendario() {
 }
 
 async function marcarObligacion(empresaId, tipo, vencimiento, completar) {
-  const method = completar ? 'POST' : 'DELETE';
-  await fetch('/api/obligacion/completar', {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empresa_id: empresaId, tipo, vencimiento }),
-  });
-  await cargarCalendario();
+  try {
+    const method = completar ? 'POST' : 'DELETE';
+    await fetch('/api/obligacion/completar', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empresa_id: empresaId, tipo, vencimiento }),
+    });
+    await cargarCalendario();
+  } catch(e) {
+    showToast('Error al actualizar obligación', 'error');
+  }
 }
 
 async function notificarObligaciones() {
@@ -1527,59 +1617,32 @@ async function procesarExtracto(file) {
   if (!file || !empresaActual) return;
   const area = document.getElementById('conc-upload-area');
   area.innerHTML = `<div class="li-upload-icon">⏳</div><div class="li-upload-text">Procesando extracto...</div>`;
-
-  const form = new FormData();
-  form.append('archivo', file);
-
-  const res  = await fetch(`/api/empresa/${empresaActual.id}/conciliacion`, { method: 'POST', body: form });
-  const data = await res.json();
-
-  if (!data.ok) {
-    area.innerHTML = `
-      <div class="li-upload-icon">⚠</div>
-      <div class="li-upload-text" style="color:var(--red)">${data.error}</div>
-      <button class="li-upload-btn" onclick="initConciliacion()">Intentar de nuevo</button>`;
-    return;
+  try {
+    const form = new FormData();
+    form.append('archivo', file);
+    const res  = await fetch(`/api/empresa/${empresaActual.id}/conciliacion`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data.ok) {
+      area.innerHTML = `<div class="li-upload-icon">⚠</div><div class="li-upload-text" style="color:var(--red)">${esc(data.error)}</div><button class="li-upload-btn" onclick="initConciliacion()">Intentar de nuevo</button>`;
+    } else {
+      area.style.display = 'none';
+      document.getElementById('conc-resultado').style.display = '';
+      const r = data.resumen;
+      document.getElementById('conc-resumen').innerHTML = `
+        <div class="kpi-card green"><div class="kpi-label">Transacciones en extracto</div><div class="kpi-value">${r.total_filas}</div></div>
+        <div class="kpi-card green"><div class="kpi-label">Identificadas con facturas</div><div class="kpi-value">${r.matches}</div><div class="kpi-sub">${r.pct_match}% del extracto</div></div>
+        <div class="kpi-card ${r.sin_match > 0 ? 'yellow' : 'green'}"><div class="kpi-label">Sin identificar</div><div class="kpi-value">${r.sin_match}</div><div class="kpi-sub">Revisar manualmente</div></div>`;
+      document.getElementById('conc-matches-tbody').innerHTML = data.coincidencias.map(c =>
+        `<tr><td><b>${COP(c.extracto_monto)}</b></td><td class="muted">${c.extracto_fecha}</td><td>${c.extracto_desc || '—'}</td><td><b>${c.factura_numero}</b></td><td>${c.factura_tercero}</td><td style="color:var(--green)">${COP(c.factura_neto)}</td><td class="muted">${c.diferencia > 0 ? COP(c.diferencia) : '—'}</td><td><span class="badge ${c.tipo === 'exacto' ? 'green' : 'yellow'}">${c.tipo}</span></td></tr>`
+      ).join('');
+      const sinTbody = document.getElementById('conc-sinmatch-tbody');
+      sinTbody.innerHTML = data.sin_match.length
+        ? data.sin_match.map(s => `<tr><td>${COP(s.monto)}</td><td class="muted">${s.fecha}</td><td>${s.descripcion || '—'}</td></tr>`).join('')
+        : '<tr><td colspan="3" style="color:var(--green);text-align:center">Todas las transacciones fueron identificadas</td></tr>';
+    }
+  } catch(e) {
+    area.innerHTML = `<div class="li-upload-icon">⚠</div><div class="li-upload-text" style="color:var(--red)">Error al procesar el extracto</div><button class="li-upload-btn" onclick="initConciliacion()">Intentar de nuevo</button>`;
   }
-
-  area.style.display = 'none';
-  const result = document.getElementById('conc-resultado');
-  result.style.display = '';
-
-  const r = data.resumen;
-  document.getElementById('conc-resumen').innerHTML = `
-    <div class="kpi-card green">
-      <div class="kpi-label">Transacciones en extracto</div>
-      <div class="kpi-value">${r.total_filas}</div>
-    </div>
-    <div class="kpi-card green">
-      <div class="kpi-label">Identificadas con facturas</div>
-      <div class="kpi-value">${r.matches}</div>
-      <div class="kpi-sub">${r.pct_match}% del extracto</div>
-    </div>
-    <div class="kpi-card ${r.sin_match > 0 ? 'yellow' : 'green'}">
-      <div class="kpi-label">Sin identificar</div>
-      <div class="kpi-value">${r.sin_match}</div>
-      <div class="kpi-sub">Revisar manualmente</div>
-    </div>`;
-
-  const matchTbody = document.getElementById('conc-matches-tbody');
-  matchTbody.innerHTML = data.coincidencias.map(c => `
-    <tr>
-      <td><b>${COP(c.extracto_monto)}</b></td>
-      <td class="muted">${c.extracto_fecha}</td>
-      <td>${c.extracto_desc || '—'}</td>
-      <td><b>${c.factura_numero}</b></td>
-      <td>${c.factura_tercero}</td>
-      <td style="color:var(--green)">${COP(c.factura_neto)}</td>
-      <td class="muted">${c.diferencia > 0 ? COP(c.diferencia) : '—'}</td>
-      <td><span class="badge ${c.tipo === 'exacto' ? 'green' : 'yellow'}">${c.tipo}</span></td>
-    </tr>`).join('');
-
-  const sinTbody = document.getElementById('conc-sinmatch-tbody');
-  sinTbody.innerHTML = data.sin_match.length
-    ? data.sin_match.map(s => `<tr><td>${COP(s.monto)}</td><td class="muted">${s.fecha}</td><td>${s.descripcion || '—'}</td></tr>`).join('')
-    : '<tr><td colspan="3" style="color:var(--green);text-align:center">Todas las transacciones fueron identificadas</td></tr>';
 }
 
 function concNueva() { initConciliacion(); }
@@ -1779,58 +1842,55 @@ async function loadDeclaraciones() {
 
 // ── FLUJO DE CAJA ─────────────────────────────────────────────────────────────
 
+function _flujoCajaRow(w) {
+  return '<tr><td>' + w.label + '</td><td class="green">' + (w.ingresos > 0 ? COP(w.ingresos) : '—') + '</td><td class="red">' + (w.egresos > 0 ? COP(w.egresos) : '—') + '</td><td class="' + (w.neto >= 0 ? 'green' : 'red') + '">' + COP(w.neto) + '</td></tr>';
+}
+
 async function loadFlujoCaja(eid) {
-  const data = await fetch(`/api/empresa/${eid}/flujo-caja`).then(r => r.json());
-
-  // KPIs
-  const totalIng = data.semanas.reduce((s, w) => s + w.ingresos, 0);
-  const totalEgr = data.semanas.reduce((s, w) => s + w.egresos, 0);
-  const neto60   = totalIng - totalEgr;
-  document.getElementById('flujo-caja-kpis').innerHTML = `
-    <div class="fc-kpi green"><div class="fc-kpi-label">Ingresos esperados (60d)</div><div class="fc-kpi-val">${COP(totalIng)}</div></div>
-    <div class="fc-kpi red">  <div class="fc-kpi-label">Egresos esperados (60d)</div> <div class="fc-kpi-val">${COP(totalEgr)}</div></div>
-    <div class="fc-kpi ${neto60 >= 0 ? 'blue' : 'red'}"><div class="fc-kpi-label">Flujo neto proyectado</div><div class="fc-kpi-val">${COP(neto60)}</div></div>
-    ${data.cartera_vencida > 0 ? `<div class="fc-kpi red"><div class="fc-kpi-label">Cartera vencida (no incluida)</div><div class="fc-kpi-val">${COP(data.cartera_vencida)}</div></div>` : ''}`;
-
-  // Chart
-  const labels  = data.semanas.map(w => w.label);
-  const ingrArr = data.semanas.map(w => w.ingresos / 1_000_000);
-  const egrArr  = data.semanas.map(w => -w.egresos / 1_000_000);
-  const netoArr = data.semanas.map(w => w.neto / 1_000_000);
-
-  if (_flujoCajaChart) _flujoCajaChart.destroy();
-  const ctx = document.getElementById('flujo-caja-chart').getContext('2d');
-  _flujoCajaChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Ingresos (M COP)', data: ingrArr, backgroundColor: 'rgba(16,185,129,.7)', borderColor: '#10b981', borderWidth: 1.5, borderRadius: 4 },
-        { label: 'Egresos (M COP)',  data: egrArr,  backgroundColor: 'rgba(239,68,68,.7)',  borderColor: '#ef4444', borderWidth: 1.5, borderRadius: 4 },
-        { label: 'Neto (M COP)',     data: netoArr, type: 'line', borderColor: '#e8533a', backgroundColor: 'rgba(232,83,58,.1)', borderWidth: 2.5, pointRadius: 4, tension: 0.3, fill: false },
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: true,
-      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 12 } } } },
-      scales: {
-        x: { stacked: false, ticks: { color: '#64748b' }, grid: { color: 'rgba(100,116,139,.15)' } },
-        y: { ticks: { color: '#64748b', callback: v => v.toFixed(1) + 'M' }, grid: { color: 'rgba(100,116,139,.15)' } }
+  try {
+    const data = await fetch(`/api/empresa/${eid}/flujo-caja`).then(r => r.json());
+    const totalIng = data.semanas.reduce((s, w) => s + w.ingresos, 0);
+    const totalEgr = data.semanas.reduce((s, w) => s + w.egresos, 0);
+    const neto60   = totalIng - totalEgr;
+    const carteraHtml = data.cartera_vencida > 0
+      ? '<div class="fc-kpi red"><div class="fc-kpi-label">Cartera vencida (no incluida)</div><div class="fc-kpi-val">' + COP(data.cartera_vencida) + '</div></div>'
+      : '';
+    document.getElementById('flujo-caja-kpis').innerHTML =
+      '<div class="fc-kpi green"><div class="fc-kpi-label">Ingresos esperados (60d)</div><div class="fc-kpi-val">' + COP(totalIng) + '</div></div>' +
+      '<div class="fc-kpi red"><div class="fc-kpi-label">Egresos esperados (60d)</div><div class="fc-kpi-val">' + COP(totalEgr) + '</div></div>' +
+      '<div class="fc-kpi ' + (neto60 >= 0 ? 'blue' : 'red') + '"><div class="fc-kpi-label">Flujo neto proyectado</div><div class="fc-kpi-val">' + COP(neto60) + '</div></div>' +
+      carteraHtml;
+    const labels  = data.semanas.map(w => w.label);
+    const ingrArr = data.semanas.map(w => w.ingresos / 1_000_000);
+    const egrArr  = data.semanas.map(w => -w.egresos / 1_000_000);
+    const netoArr = data.semanas.map(w => w.neto / 1_000_000);
+    if (_flujoCajaChart) _flujoCajaChart.destroy();
+    const ctx = document.getElementById('flujo-caja-chart').getContext('2d');
+    _flujoCajaChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Ingresos (M COP)', data: ingrArr, backgroundColor: 'rgba(16,185,129,.7)', borderColor: '#10b981', borderWidth: 1.5, borderRadius: 4 },
+          { label: 'Egresos (M COP)',  data: egrArr,  backgroundColor: 'rgba(239,68,68,.7)',  borderColor: '#ef4444', borderWidth: 1.5, borderRadius: 4 },
+          { label: 'Neto (M COP)',     data: netoArr, type: 'line', borderColor: '#e8533a', backgroundColor: 'rgba(232,83,58,.1)', borderWidth: 2.5, pointRadius: 4, tension: 0.3, fill: false },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 12 } } } },
+        scales: {
+          x: { stacked: false, ticks: { color: '#64748b' }, grid: { color: 'rgba(100,116,139,.15)' } },
+          y: { ticks: { color: '#64748b', callback: v => v.toFixed(1) + 'M' }, grid: { color: 'rgba(100,116,139,.15)' } }
+        }
       }
-    }
-  });
-
-  // Tabla resumen
-  document.getElementById('flujo-caja-tabla').innerHTML = `
-    <table class="data-table" style="margin-top:1.25rem">
-      <thead><tr><th>Semana</th><th>Ingresos</th><th>Egresos</th><th>Flujo Neto</th></tr></thead>
-      <tbody>${data.semanas.map(w => `
-        <tr>
-          <td>${w.label}</td>
-          <td class="green">${w.ingresos > 0 ? COP(w.ingresos) : '—'}</td>
-          <td class="red">${w.egresos > 0 ? COP(w.egresos) : '—'}</td>
-          <td class="${w.neto >= 0 ? 'green' : 'red'}">${COP(w.neto)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>`;
+    });
+    document.getElementById('flujo-caja-tabla').innerHTML =
+      '<table class="data-table" style="margin-top:1.25rem"><thead><tr><th>Semana</th><th>Ingresos</th><th>Egresos</th><th>Flujo Neto</th></tr></thead><tbody>' +
+      data.semanas.map(_flujoCajaRow).join('') +
+      '</tbody></table>';
+  } catch(e) {
+    const el = document.getElementById('flujo-caja-kpis');
+    if (el) el.innerHTML = '<p style="color:var(--red);padding:.75rem">Error al cargar flujo de caja</p>';
+  }
 }

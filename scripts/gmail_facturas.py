@@ -18,7 +18,7 @@ Uso:
 
 import os, sys, base64, re, argparse, json, logging
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 try:
@@ -229,7 +229,7 @@ def marcar_leido(service, msg_id):
             body={"removeLabelIds": ["UNREAD"]}
         ).execute()
     except Exception as e:
-        print(f"    Aviso: no se pudo marcar como leido: {e}")
+        logging.warning("No se pudo marcar como leido: %s", e)
 
 
 # ── Escaneo principal ─────────────────────────────────────────────────────────
@@ -245,11 +245,16 @@ def registrar_watch(service, empresa_id: int) -> dict:
         "labelFilterBehavior": "INCLUDE"
     }).execute()
     _sb = get_sb()
+    exp_ms = result.get("expiration", "")
+    try:
+        exp_iso = datetime.utcfromtimestamp(int(exp_ms) / 1000).strftime("%Y-%m-%dT%H:%M:%SZ") if exp_ms else ""
+    except (ValueError, TypeError):
+        exp_iso = str(exp_ms)
     _sb.table("gmail_tokens").update({
         "history_id":    str(result.get("historyId", "")),
-        "watch_expires": str(result.get("expiration", "")),
+        "watch_expires": exp_iso,
     }).eq("empresa_id", empresa_id).execute()
-    print(f"[push] Watch registrado empresa {empresa_id} — expira {result.get('expiration')}")
+    logging.info("[push] Watch registrado empresa %s — expira %s", empresa_id, result.get('expiration'))
     return result
 
 def renovar_todos_los_watches():
@@ -281,9 +286,9 @@ def escanear_desde_history(service, empresa_id: int, email: str, history_id: str
             for m in h.get("messagesAdded", []):
                 msg_ids.append(m["message"]["id"])
         if not msg_ids:
-            print(f"[push] {email}: sin mensajes nuevos")
+            logging.info("[push] %s: sin mensajes nuevos", email)
             return
-        print(f"[push] {email}: {len(msg_ids)} mensajes nuevos")
+        logging.info("[push] %s: %d mensajes nuevos", email, len(msg_ids))
         service_obj = service
         for mid in msg_ids:
             msg = service_obj.users().messages().get(userId="me", id=mid, format="full").execute()
@@ -309,7 +314,7 @@ def escanear_todas_empresas(max_correos=50, sb=None):
         sb = get_sb()
     tokens = sb.table("gmail_tokens").select("empresa_id,email").eq("activo", True).execute().data
     if not tokens:
-        print("[gmail] No hay cuentas de Gmail conectadas.")
+        logging.info("[gmail] No hay cuentas de Gmail conectadas.")
         return
     for t in tokens:
         eid   = t["empresa_id"]
@@ -317,12 +322,12 @@ def escanear_todas_empresas(max_correos=50, sb=None):
         try:
             service, _ = get_gmail_from_supabase(eid)
             if not service:
-                print(f"[gmail] Sin token para empresa {eid}")
+                logging.warning("[gmail] Sin token para empresa %s", eid)
                 continue
             if not hay_correos_nuevos(service):
-                print(f"[gmail] {email} — sin correos nuevos, omitiendo")
+                logging.info("[gmail] %s — sin correos nuevos, omitiendo", email)
                 continue
-            print(f"\n[gmail] Escaneando {email} (empresa {eid})...")
+            logging.info("[gmail] Escaneando %s (empresa %s)...", email, eid)
             escanear_inbox(empresa_id=eid, max_correos=max_correos, service=service)
         except Exception as e:
             logging.exception(f"[gmail] Error empresa {eid} ({email})")
@@ -333,14 +338,14 @@ def escanear_inbox(empresa_id, max_correos=100, service=None):
 
     # Query amplia — el filtro inteligente lo hace puntaje_es_factura()
     query = "has:attachment is:unread (filename:pdf OR filename:xml OR filename:zip)"
-    print(f"Buscando en Gmail (máx {max_correos} correos)...")
+    logging.info("Buscando en Gmail (máx %d correos)...", max_correos)
 
     result = service.users().messages().list(
         userId="me", q=query, maxResults=max_correos
     ).execute()
 
     mensajes = result.get("messages", [])
-    print(f"Correos con adjuntos encontrados: {len(mensajes)}\n")
+    logging.info("Correos con adjuntos encontrados: %d", len(mensajes))
 
     stats = {"nuevas": 0, "duplicadas": 0, "ignoradas": 0, "errores": 0}
 
@@ -353,109 +358,94 @@ def escanear_inbox(empresa_id, max_correos=100, service=None):
         if resultado in ("nuevas", "duplicadas"):
             marcar_leido(service, ref["id"])
 
-    print(f"\nResultado:")
-    print(f"  OK  Facturas nuevas registradas : {stats['nuevas']}")
-    print(f"  =   Ya existian (duplicadas)    : {stats['duplicadas']}")
-    print(f"  --  Ignoradas (no son facturas) : {stats['ignoradas']}")
-    print(f"  !   Errores                     : {stats['errores']}")
+    logging.info("Resultado: nuevas=%d duplicadas=%d ignoradas=%d errores=%d",
+                 stats['nuevas'], stats['duplicadas'], stats['ignoradas'], stats['errores'])
     return stats
 
 
 # ── Procesamiento de un mensaje ───────────────────────────────────────────────
 
+def _descargar_adjunto(service, msg_id: str, att_id: str, fname: str, empresa_dir: Path):
+    """Descarga adjunto de Gmail, guarda en disco. Retorna lista de paths o None si falla."""
+    att  = service.users().messages().attachments().get(userId="me", messageId=msg_id, id=att_id).execute()
+    data = base64.urlsafe_b64decode(att["data"])
+    empresa_dir.mkdir(parents=True, exist_ok=True)
+    if fname.lower().endswith(".zip"):
+        archivos = descomprimir_zip(data, empresa_dir)
+        if not archivos:
+            logging.warning("ZIP sin PDF/XML valido: %s", fname)
+            return None
+        return archivos
+    file_path = empresa_dir / fname
+    file_path.write_bytes(data)
+    return [file_path]
+
+
+def _extraer_datos_adjunto(archivos):
+    """Intenta extraer datos DIAN de la lista de archivos. Retorna (datos, file_usado)."""
+    for file_path in archivos:
+        datos = extraer_xml(str(file_path)) if file_path.suffix.lower() == ".xml" else extraer_pdf(str(file_path))
+        if datos:
+            return datos, file_path
+    return None, None
+
+
+def _enriquecer_datos(datos: dict, info: dict) -> dict:
+    """Completa campos faltantes con info extraída del asunto del correo."""
+    for campo_datos, campo_info in [("proveedor_nit", "nit_emisor"), ("proveedor_nombre", "nombre_emisor"), ("numero", "numero")]:
+        if info.get(campo_info) and not datos.get(campo_datos):
+            datos[campo_datos] = info[campo_info]
+    return datos
+
+
 def procesar_mensaje(service, msg, empresa_id):
-    headers  = {h["name"]: h["value"] for h in msg["payload"].get("headers", [])}
-    asunto   = headers.get("Subject", "")
+    headers   = {h["name"]: h["value"] for h in msg["payload"].get("headers", [])}
+    asunto    = headers.get("Subject", "")
     remitente = re.search(r"[\w\.\-]+@[\w\.\-]+", headers.get("From", ""))
     remitente = remitente.group(0).lower() if remitente else ""
-    parts    = msg["payload"].get("parts", [])
 
-    # Revisar adjuntos
-    for part in parts:
+    for part in msg["payload"].get("parts", []):
         fname  = part.get("filename", "")
         att_id = part.get("body", {}).get("attachmentId")
-        if not fname or not att_id:
-            continue
-        if not fname.lower().endswith((".pdf", ".xml", ".zip")):
+        if not fname or not att_id or not fname.lower().endswith((".pdf", ".xml", ".zip")):
             continue
 
         es_factura, confianza, info = puntaje_es_factura(asunto, fname, remitente)
-
         if not es_factura:
-            print(f"  [ignorado {confianza}pts] {asunto[:60]}")
-            return "ignoradas"
+            logging.debug("[ignorado %dpts] %s", confianza, asunto[:60])
+            continue
+        logging.info("[factura %dpts] %s", confianza, asunto[:60])
 
-        print(f"  [factura {confianza}pts] {asunto[:60]}")
-
-        # Descargar adjunto
         try:
-            att  = service.users().messages().attachments().get(
-                userId="me", messageId=msg["id"], id=att_id
-            ).execute()
-            data = base64.urlsafe_b64decode(att["data"])
-        except Exception as e:
-            print(f"    Error descargando {fname}: {e}")
-            return "errores"
+            archivos = _descargar_adjunto(service, msg["id"], att_id, fname, ADJUNTOS_DIR / str(empresa_id))
+        except Exception:
+            logging.exception("Error descargando %s", fname)
+            continue
+        if not archivos:
+            continue
 
-        empresa_dir = ADJUNTOS_DIR / str(empresa_id)
-        empresa_dir.mkdir(parents=True, exist_ok=True)
-
-        # Si es ZIP, descomprimir y buscar PDF/XML adentro
-        if fname.lower().endswith(".zip"):
-            archivos = descomprimir_zip(data, empresa_dir)
-            if not archivos:
-                print(f"    ZIP sin PDF/XML valido: {fname}")
-                return "errores"
-        else:
-            file_path = empresa_dir / fname
-            file_path.write_bytes(data)
-            archivos = [file_path]
-
-        datos = None
-        file_usado = None
-        for file_path in archivos:
-            if file_path.suffix.lower() == ".xml":
-                datos = extraer_xml(str(file_path))
-            else:
-                datos = extraer_pdf(str(file_path))
-            if datos:
-                file_usado = file_path
-                break
-
+        datos, file_usado = _extraer_datos_adjunto(archivos)
         if not datos:
-            return "errores"
+            continue
+        datos = _enriquecer_datos(datos, info)
 
-        # Completar con info del asunto si el archivo no traia todo
-        if info.get("nit_emisor") and not datos.get("proveedor_nit"):
-            datos["proveedor_nit"] = info["nit_emisor"]
-        if info.get("nombre_emisor") and not datos.get("proveedor_nombre"):
-            datos["proveedor_nombre"] = info["nombre_emisor"]
-        if info.get("numero") and not datos.get("numero"):
-            datos["numero"] = info["numero"]
-
-        # Detectar empresa por NIT receptor
         _sb = get_sb()
         empresa = detectar_o_crear_empresa(datos, _sb)
         if not empresa:
-            print(f"    ! Empresa no encontrada (NIT {datos.get('receptor_nit','?')}) — avisando por Telegram con botones")
+            logging.warning("Empresa no encontrada (NIT %s) — avisando por Telegram", datos.get("receptor_nit", "?"))
             pendiente_id = guardar_empresa_pendiente(datos, fuente="gmail", sb=_sb)
             empresas_all = _sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
             notificar_empresa_desconocida(datos, fuente="gmail", pendiente_id=pendiente_id, empresas=empresas_all)
             return "ignoradas"
 
-        eid_real = empresa["id"]
-        empresa_nombre = empresa["razon_social"]
-
-        resultado = registrar_en_db(datos, eid_real, empresa["nit"], str(file_usado))
-
+        resultado = registrar_en_db(datos, empresa["id"], empresa["nit"], str(file_usado))
         if resultado == "nuevas" and remitente:
             flujo = determinar_flujo(datos, empresa["nit"])
             guardar_remitente(remitente, datos.get("proveedor_nombre", ""), confianza)
-            print(f"    OK [{flujo}] Registrada: {datos.get('numero')} | {datos.get('proveedor_nombre', remitente)} → {empresa_nombre}")
-            notificar_factura(datos, empresa_nombre, tipo=flujo, fuente="gmail")
+            logging.info("[%s] Registrada: %s | %s → %s", flujo, datos.get("numero"), datos.get("proveedor_nombre", remitente), empresa["razon_social"])
+            notificar_factura(datos, empresa["razon_social"], tipo=flujo, fuente="gmail")
         else:
-            print(f"    = Duplicada: {datos.get('numero')}")
-
+            logging.info("Duplicada: %s", datos.get("numero"))
         return resultado
 
     return "ignoradas"

@@ -616,3 +616,21 @@ details[open] > summary .arch-chevron { transform:rotate(180deg); }
   color: #ef4444; background: #fef2f2; border-radius: 10px;
   border: 1px solid #fecaca; font-size: 14px;
 }
+
+/* ── Paginación ───────────────────────────────────────────────────────────── */
+.paginacion { display:flex; align-items:center; gap:.75rem; padding:.85rem 0; justify-content:center; }
+.pag-btn { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:.4rem .9rem; font-size:13px; font-family:inherit; cursor:pointer; color:var(--text); transition:background .15s; }
+.pag-btn:hover:not(:disabled) { background:var(--bg3); }
+.pag-btn:disabled { opacity:.38; cursor:default; }
+.pag-info { font-size:13px; color:var(--muted); }
+
+/* ── Mobile responsive ────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 700px; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .empresa-detail-kpis { grid-template-columns: 1fr 1fr; }
+  .nav { gap: .25rem; padding: .5rem; flex-wrap: nowrap; overflow-x: auto; }
+  .nav-btn { white-space: nowrap; flex-shrink: 0; font-size: 12px; padding: .45rem .75rem; }
+  .detail-header { flex-direction: column; gap: .75rem; }
+}
