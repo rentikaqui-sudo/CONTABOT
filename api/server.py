@@ -1461,9 +1461,10 @@ def declaraciones_empresa(eid):
         })
 
     regimen = e.get("regimen") or "Juridica"
-    aplica_iva    = regimen in ("Juridica", "GranContribuyente")
+    # responsable_iva = jurídica obligada a declarar IVA (pero no necesariamente agente retenedor)
+    aplica_iva    = regimen in ("Juridica", "GranContribuyente", "responsable_iva")
     aplica_rtefte = regimen in ("Juridica", "GranContribuyente")
-    aplica_ica    = regimen in ("Juridica", "GranContribuyente", "Simple")
+    aplica_ica    = regimen in ("Juridica", "GranContribuyente", "Simple", "responsable_iva")
 
     return jsonify({
         "ok":      True,

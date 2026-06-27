@@ -1309,7 +1309,7 @@ async function loadDeclaracionesEmpresa(eid) {
 
   box.innerHTML = `
     <p style="color:var(--muted);font-size:13px;margin:0 0 1.5rem">Régimen: <strong>${regimen}</strong></p>
-    <h3 style="margin:0 0 1rem">Formulario 300 — IVA Cuatrimestral</h3>
+    <h3 style="margin:0 0 1rem">Formulario 300 — IVA (por cuatrimestre)</h3>
     ${secF300}
     <h3 style="margin:1.5rem 0 1rem">Formulario 350 — Retefuente Mensual</h3>
     ${secF350}
