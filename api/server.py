@@ -1767,6 +1767,46 @@ def informe_excel(eid):
             for ci in range(2, 9):
                 ws_ica.cell(row=ri, column=ci).font = Font(bold=True, color="C0392B")
 
+    # ── Hoja RENTA ─────────────────────────────────────────────────────────────
+    regimen_excel = e.get("regimen") or "Juridica"
+    ws_r = wb.create_sheet("RENTA")
+    ws_r.merge_cells("A1:C1")
+    hr = ws_r["A1"]; hr.value = f"ESTIMACIÓN RENTA ANUAL — {e['razon_social']} | 2026"
+    hr.font = Font(bold=True, size=12, color="1E3A5F")
+    hr.alignment = Alignment(horizontal="center")
+    style_header(ws_r, ["Concepto", "Valor (COP)", "Nota"], row=2)
+    es_jur = regimen_excel in ("Juridica", "GranContribuyente", "responsable_iva")
+    ingr   = round(sum(_sgn(r) * (r["valor_neto"] or 0) for r in vs))
+    gast   = round(sum(r["valor_neto"] or 0 for r in gs))
+    base   = ingr - gast
+    imp    = round(base * 0.35) if es_jur and base > 0 else 0
+    renta_rows = [
+        ("Ingresos identificados (facturas electrónicas)", ingr, "Ventas netas del período"),
+        ("Gastos deducibles identificados (facturas)",     gast, "Compras y gastos del período"),
+        ("Base estimada",                                  base, "Solo facturas en ContaBot"),
+    ]
+    if es_jur:
+        renta_rows.append(("Impuesto estimado (35%)", imp, "Tarifa general personas jurídicas"))
+    for ri, (concepto, valor, nota) in enumerate(renta_rows, 3):
+        ws_r.cell(row=ri, column=1, value=concepto).border = BORDER
+        vc = ws_r.cell(row=ri, column=2, value=valor)
+        vc.border = BORDER; vc.number_format = NUM_FMT; vc.alignment = Alignment(horizontal="right")
+        if concepto.startswith("Base") or concepto.startswith("Impuesto"):
+            vc.font = Font(bold=True, color="C0392B" if valor > 0 else "27AE60")
+        ws_r.cell(row=ri, column=3, value=nota).border = BORDER
+    # Fila de advertencia
+    ri_adv = len(renta_rows) + 4
+    ws_r.merge_cells(f"A{ri_adv}:C{ri_adv}")
+    adv = ws_r.cell(row=ri_adv, column=1,
+        value="⚠️ Esta estimación solo incluye facturas electrónicas registradas en ContaBot. "
+              "Para declarar renta se requiere: patrimonio, otros ingresos, deducciones personales y certificados de retención.")
+    adv.font = Font(italic=True, color="7F8C8D", size=9)
+    adv.alignment = Alignment(wrap_text=True)
+    ws_r.row_dimensions[ri_adv].height = 40
+    ws_r.column_dimensions["A"].width = 48
+    ws_r.column_dimensions["B"].width = 18
+    ws_r.column_dimensions["C"].width = 36
+
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
