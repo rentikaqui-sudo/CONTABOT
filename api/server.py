@@ -2519,15 +2519,16 @@ def limpiar_facturas_empresa(eid):
 @login_required
 def notificar_obligaciones():
     """Envía Telegram con obligaciones que vencen en los próximos 7 días."""
-    empresas = sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
+    cid      = session["contador_id"]
+    empresas = sb.table("empresas_clientes").select("id,nit,razon_social").eq("contador_id", cid).execute().data
     proximas = obligaciones_proximas(empresas, dias=7)
     if not proximas:
         return jsonify({"ok": True, "enviadas": 0})
 
     token   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+    chat_id = _tg_chat_id_for_contador(cid)
     if not token or not chat_id:
-        return jsonify({"ok": False, "error": "Telegram no configurado"})
+        return jsonify({"ok": False, "error": "Telegram no configurado — vincula tu cuenta con /vincular en @contabot_contador_bot"})
 
     import urllib.request, urllib.parse, json as _json
     lineas = ["*Obligaciones tributarias próximas (7 días)*\n"]
@@ -2702,6 +2703,35 @@ def confirmar_factura():
     notificar_factura(datos, empresa_nombre, tipo=flujo, fuente="upload", sb=sb, contador_id=session["contador_id"])
     return jsonify({"ok": True, "duplicada": False, "empresa": empresa_nombre,
                     "mensaje": f"Factura {datos.get('numero','')} registrada en {empresa_nombre} como {flujo}."})
+
+
+# ── Telegram — helpers ───────────────────────────────────────────────────────
+
+def _tg_chat_id_for_contador(contador_id) -> str:
+    """Retorna telegram_chat_id del contador; fallback a la variable global."""
+    if contador_id:
+        try:
+            rows = sb.table("contadores").select("telegram_chat_id").eq("id", contador_id).execute().data
+            if rows and rows[0].get("telegram_chat_id"):
+                return rows[0]["telegram_chat_id"]
+        except Exception:
+            pass
+    return os.environ.get("TELEGRAM_CHAT_ID", "")
+
+
+def _tg_send_raw(chat_id: str, texto: str):
+    """Envía mensaje Telegram usando el token de entorno."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not token or not chat_id:
+        return
+    try:
+        payload = json.dumps({"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"}).encode()
+        _urllib_req.urlopen(_urllib_req.Request(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data=payload, headers={"Content-Type": "application/json"}
+        ), timeout=5)
+    except Exception as ex:
+        logging.warning("[tg] No se pudo enviar: %s", ex)
 
 
 # ── Telegram — vinculación por contador ──────────────────────────────────────
@@ -2965,14 +2995,10 @@ def _cron_gmail():
         logging.exception("[cron] Gmail watches error")
 
 def _cron_tokens_gmail():
-    """Avisa por Telegram cuando un token de Gmail está en día 6 de 7."""
+    """Avisa por Telegram al contador dueño de cada empresa cuando su token Gmail vence."""
     try:
         tokens = sb.table("gmail_tokens").select("*").eq("activo", True).execute().data
-        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-        chat_id   = os.environ.get("TELEGRAM_CHAT_ID", "")
-        if not bot_token or not chat_id:
-            return
-        host = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+        host     = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
         base_url = f"https://{host}" if host else "http://localhost:5000"
         for t in tokens:
             created_raw = t.get("token_created_at", "")
@@ -2982,8 +3008,11 @@ def _cron_tokens_gmail():
             dias = (datetime.now(timezone.utc) - created).days
             if dias < 6:
                 continue
-            empresa = sb.table("empresas_clientes").select("razon_social").eq("id", t["empresa_id"]).execute().data
-            nombre = empresa[0]["razon_social"] if empresa else f"Empresa {t['empresa_id']}"
+            # Obtener empresa y su contador_id
+            emp = sb.table("empresas_clientes").select("razon_social,contador_id").eq("id", t["empresa_id"]).execute().data
+            nombre      = emp[0]["razon_social"] if emp else f"Empresa {t['empresa_id']}"
+            contador_id = emp[0].get("contador_id") if emp else None
+            chat_id     = _tg_chat_id_for_contador(contador_id)
             link = f"{base_url}/auth/gmail?empresa_id={t['empresa_id']}&email={t['email']}"
             texto = (
                 f"⚠️ *Token Gmail por vencer — {nombre}*\n"
@@ -2993,42 +3022,35 @@ def _cron_tokens_gmail():
                 f"🔗 {link}\n\n"
                 f"Solo haz clic en _Permitir_ — permisos ya preconfigurados."
             )
-            payload = json.dumps({"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"}).encode()
-            req = _urllib_req.Request(
-                f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                data=payload, headers={"Content-Type": "application/json"}
-            )
-            _urllib_req.urlopen(req, timeout=5)
-            logging.info(f"[tokens] Aviso enviado: {nombre} ({t['email']}) día {dias}")
+            _tg_send_raw(chat_id, texto)
+            logging.info(f"[tokens] Aviso enviado a contador {contador_id}: {nombre} ({t['email']}) día {dias}")
     except Exception as ex:
         logging.exception("[tokens] Error chequeando tokens")
 
 def _cron_obligaciones():
-    """Notifica por Telegram las obligaciones que vencen en 7 días."""
+    """Notifica por Telegram al contador de cada empresa las obligaciones que vencen en 7 días."""
     try:
-        empresas = sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
-        proximas = obligaciones_proximas(empresas, dias=7)
-        if not proximas:
-            return
-        token   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-        chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
-        if not token or not chat_id:
-            return
-        import urllib.request, json as _json
-        lineas = ["*Obligaciones tributarias — próximos 7 días*\n"]
-        for p in proximas:
-            ob   = p["obligacion"]
-            dias = p["dias_restantes"]
-            emoji = "🔴" if dias <= 2 else "🟡"
-            lineas.append(f"{emoji} *{ob['tipo']}* — {p['empresa']}\n   {ob['periodo']} | Vence {ob['vencimiento']} ({dias}d)")
-        payload = _json.dumps({
-            "chat_id": chat_id, "text": "\n".join(lineas), "parse_mode": "Markdown"
-        }).encode()
-        req = urllib.request.Request(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            data=payload, headers={"Content-Type": "application/json"}
-        )
-        urllib.request.urlopen(req, timeout=5)
+        # Agrupar empresas por contador_id
+        todas = sb.table("empresas_clientes").select("id,nit,razon_social,contador_id").execute().data
+        por_contador: dict = {}
+        for e in todas:
+            cid = e.get("contador_id")
+            por_contador.setdefault(cid, []).append(e)
+
+        for cid, empresas in por_contador.items():
+            proximas = obligaciones_proximas(empresas, dias=7)
+            if not proximas:
+                continue
+            chat_id = _tg_chat_id_for_contador(cid)
+            if not chat_id:
+                continue
+            lineas = ["*Obligaciones tributarias — próximos 7 días*\n"]
+            for p in proximas:
+                ob    = p["obligacion"]
+                dias  = p["dias_restantes"]
+                emoji = "🔴" if dias <= 2 else "🟡"
+                lineas.append(f"{emoji} *{ob['tipo']}* — {p['empresa']}\n   {ob['periodo']} | Vence {ob['vencimiento']} ({dias}d)")
+            _tg_send_raw(chat_id, "\n".join(lineas))
     except Exception as ex:
         logging.exception("[cron] Obligaciones error")
 
