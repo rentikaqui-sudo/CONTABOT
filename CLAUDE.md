@@ -1,74 +1,110 @@
-# ContaBot Demo — Instrucciones del Proyecto
+# ContaBot — Instrucciones del Proyecto
 
 ## Qué es esto
-Demo de automatización contable colombiana para mostrarle a un contador cómo la automatización puede ahorrarle tiempo. Empresa ficticia: **Distribuidora ABC S.A.S.** (NIT 900.456.789-3).
+Sistema de automatización contable colombiana en producción. Un contador (Federico Aristizábal) gestiona múltiples empresas clientes. ContaBot extrae facturas electrónicas DIAN automáticamente desde Gmail, las registra en Supabase, y genera pre-liquidaciones de impuestos.
 
 ## Stack
-- **Python 3.12** + Flask (backend y generación de PDFs)
-- **ReportLab** — generación de facturas PDF con formato DIAN
-- **PyMuPDF** — extracción de datos de PDFs
-- **SQLite** (`data/demo.db`) — base de datos local, sin servidor
-- **HTML + Chart.js** — dashboard frontend
-- **Windows 11** — todo corre localmente, sin servicios externos
+- **Python 3.12** + Flask — backend API (puerto 5000), desplegado en Railway
+- **Supabase** (PostgreSQL) — base de datos principal, autenticación multi-contador
+- **PyMuPDF + lxml** — extracción de datos de PDFs y XMLs DIAN
+- **Gmail OAuth2** — escaneo automático de facturas por correo
+- **openpyxl** — generación de Excel contable (6 hojas)
+- **HTML + Chart.js + Vanilla JS** — dashboard frontend
+- **Telegram Bot** — notificaciones al contador
+- **Railway** — hosting producción (`contabot-demo-production.up.railway.app`)
+- **GitHub** — repo privado `rentikaqui-sudo/CONTABOT`, branch `main`
 
 ## Estructura
 ```
 contador/
 ├── CLAUDE.md
 ├── requirements.txt
-├── start_demo.bat              ← Doble clic para iniciar todo
-├── data/
-│   ├── demo.db                 ← SQLite con todas las tablas
-│   ├── facturas_venta/         ← 28 PDFs de facturas emitidas
-│   └── facturas_gastos/        ← 22 PDFs de facturas recibidas
-├── scripts/
-│   ├── datos_colombia.py       ← Datos maestros (clientes, proveedores, tasas)
-│   ├── generate_pdfs.py        ← Genera los 50 PDFs y puebla demo.db
-│   ├── procesar_facturas.py    ← Extrae datos de PDFs con PyMuPDF
-│   └── conciliacion.py         ← Lógica de conciliación bancaria
+├── manual_contabot.html        ← Manual de usuario
 ├── api/
-│   └── server.py               ← Flask API (puerto 5000)
-└── ui/
-    ├── index.html              ← Dashboard principal
-    ├── demo.js
-    └── styles.css
+│   └── server.py               ← Flask API completa (~2800 líneas)
+├── scripts/
+│   ├── extractor.py            ← Extracción XML/PDF DIAN, guardar pendientes
+│   ├── gmail_facturas.py       ← Escaneo Gmail, procesamiento de mensajes
+│   └── calendario.py           ← Obligaciones tributarias colombianas
+├── ui/
+│   ├── index.html              ← App principal (SPA)
+│   ├── demo.js                 ← Lógica frontend (~1400 líneas)
+│   └── styles.css
+└── data/
+    └── demo.db                 ← SQLite local (solo dev, ignorado en git)
 ```
 
-## Cómo correr
+## Cómo correr localmente
 ```bash
 pip install -r requirements.txt
-python scripts/generate_pdfs.py   # genera los 50 PDFs
-python api/server.py               # inicia el servidor
-# Abrir http://localhost:5000
+python api/server.py   # inicia en http://localhost:5000
 ```
 
-## Sistema colombiano implementado
-- **NIT** (no CUIT): formato 900.456.789-3
-- **CUFE**: hash SHA-384 de 96 chars (Código Único de Factura Electrónica DIAN)
-- **Resolución DIAN**: número habilitante en cada factura
-- **IVA 19%** (general), 5% y 0% según producto
+## Sistema tributario colombiano implementado
+- **NIT**: formato 900.456.789-3 con dígito verificador
+- **CUFE**: hash SHA-384 de 96 chars (Código Único Factura Electrónica DIAN)
+- **Tipos DIAN**: 01=Factura venta, 91=Nota crédito, 92=Nota débito
+- **IVA**: 19% general, 5%, 0% según producto
 - **Retefuente**: 2.5% compras, 4% servicios, 11% honorarios
 - **ReteIVA**: 15% del IVA (solo grandes contribuyentes)
-- **ReteICA**: 4.14‰ (Bogotá)
-- Bancos: Bancolombia, Davivienda, Banco de Bogotá, BBVA Colombia
+- **ReteICA**: 4.14‰ Bogotá
+- **NC (Nota Crédito)**: signo=-1 en todos los agregados de facturas_venta
 
-## Datos ficticios
-- 15 clientes colombianos con NITs y ciudades reales
-- 15 proveedores por categoría (insumos, transporte, honorarios, etc.)
-- 28 facturas de venta + 22 facturas de gastos = 50 total
-- Período: abril–junio 2026
+## Funcionalidades implementadas
+
+### Multi-contador
+- Registro/login con bcrypt, sesiones Flask
+- Cada contador ve solo sus empresas (`contador_id` en todas las tablas)
+- Ownership validation en todos los endpoints
+
+### Gmail automático
+- OAuth2 por empresa, tokens encriptados en Supabase (`gmail_tokens`)
+- Escaneo automático: detecta ZIPs DIAN (`z{NIT}`, `ad{NIT}`), XMLs, PDFs
+- Regex DIAN permite espacios alrededor de punto y coma
+- Retorna mejor resultado entre todos los adjuntos del correo
+- Bandeja pendiente: muestra el correo Gmail de origen (`_email_origen`)
+
+### Dashboard por empresa (subtabs)
+- **Ventas / Gastos**: tablas con paginación, filtros, badges NC
+- **Retenciones**: por cliente, signo correcto para NC
+- **Declaraciones**: F-300 (IVA), F-350 (Retefuente), ICA, Renta estimada
+- **Gmail**: configuración OAuth por empresa
+- **Conciliar DIAN**: cruce con Excel del portal DIAN
+
+### Declaraciones (F-300, F-350, ICA, Renta)
+- **F-300**: IVA generado (ventas) vs IVA descontable (compras), por cuatrimestre
+- **F-350**: Retefuente practicada, por mes
+- **ICA**: Base ventas × 4.14‰, bimestral
+- **Renta**: Estimación a partir de facturas + checklist de info faltante
+- Aplica según régimen: `Juridica`, `GranContribuyente`, `responsable_iva`, `Natural`
+- NC resta correctamente de todas las bases
+
+### Excel descargable (6 hojas)
+VENTAS · COMPRAS · IVA F-300 · RFTE 350 · ICA · RENTA
+
+### Bandeja Pendiente
+- Facturas cuya empresa no se pudo identificar por NIT
+- Muestra correo Gmail de origen
+- Deduplicación por NIT+numero; actualiza `_email_origen` si faltaba
+- Asignación manual a empresa existente o creación de nueva
+
+## Variables de entorno requeridas
+```
+FLASK_SECRET_KEY=...
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_KEY=...
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+ENCRYPTION_KEY=...
+```
 
 ## Memoria de sesión
 **REGLA IMPORTANTE**: Solo guardar memoria cuando el usuario diga explícitamente
 "guarda esto", "recuerda esto", o "memoria: [contenido]".
 No guardar automáticamente nada de esta sesión sin autorización explícita.
 Para invocar memoria guardada, el usuario debe decir "recuerda" o "carga memoria".
-
-## Flujos de la demo (orden de presentación)
-1. **Flujo A** — Procesamiento de facturas PDF (el "wow")
-2. **Flujo B** — Conciliación bancaria automática
-3. **Flujo C** — Dashboard financiero en tiempo real
-4. **Flujo D** — Alertas de vencimientos + emails automáticos
 
 ## graphify
 
