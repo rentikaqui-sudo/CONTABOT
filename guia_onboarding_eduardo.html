@@ -3,175 +3,86 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ContaBot — Guía de inicio para contadores</title>
+  <title>ContaBot — Guía para la reunión</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f1f5f9;
-      color: #1e293b;
-      line-height: 1.6;
-    }
-    .page {
-      max-width: 780px;
-      margin: 0 auto;
-      padding: 2rem 1.5rem 4rem;
-    }
-    @media print {
-      body { background: white; }
-      .page { padding: 1rem; }
-      .step-card { break-inside: avoid; }
-    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; line-height: 1.6; }
+    .page { max-width: 800px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+    @media print { body { background: white; } .page { padding: 0.5rem; } .card, .flow-box { break-inside: avoid; } .section { break-before: auto; } }
 
-    /* Header */
-    .header {
-      background: linear-gradient(135deg, #1e293b, #334155);
-      color: white;
-      border-radius: 16px;
-      padding: 2rem 2.5rem;
-      margin-bottom: 2rem;
-      display: flex;
-      align-items: center;
-      gap: 1.5rem;
-    }
-    .header-logo {
-      width: 56px; height: 56px;
-      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-      border-radius: 14px;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 18px; color: white;
-      flex-shrink: 0;
-    }
-    .header h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
-    .header p { font-size: 13px; color: #94a3b8; }
+    /* ── Header ── */
+    .header { background: linear-gradient(135deg, #1e293b, #334155); color: white; border-radius: 16px; padding: 1.8rem 2rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1.2rem; }
+    .logo { width: 52px; height: 52px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 13px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 17px; color: white; flex-shrink: 0; }
+    .header h1 { font-size: 20px; font-weight: 800; margin-bottom: 3px; }
+    .header p { font-size: 12px; color: #94a3b8; }
 
-    /* URL destacada */
-    .url-box {
-      background: #0f172a;
-      border: 1.5px solid #3b82f6;
-      border-radius: 12px;
-      padding: 1.1rem 1.5rem;
-      margin-bottom: 2rem;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-    .url-label { font-size: 11px; font-weight: 700; color: #3b82f6; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
-    .url-value { font-size: 15px; font-weight: 700; color: #f1f5f9; letter-spacing: 0.3px; word-break: break-all; }
+    /* ── Accesos destacados ── */
+    .accesos { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; margin-bottom: 1.5rem; }
+    .acceso-box { background: #0f172a; border-radius: 12px; padding: 1rem 1.2rem; }
+    .acceso-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #3b82f6; margin-bottom: 5px; }
+    .acceso-value { font-size: 14px; font-weight: 700; color: #f1f5f9; word-break: break-all; }
+    .acceso-sub { font-size: 11px; color: #64748b; margin-top: 3px; }
 
-    /* Código de acceso */
-    .code-banner {
-      background: linear-gradient(135deg, #7c3aed, #4f46e5);
-      border-radius: 12px;
-      padding: 1.2rem 1.5rem;
-      margin-bottom: 2rem;
-      display: flex;
-      align-items: center;
-      gap: 1.2rem;
-      color: white;
-    }
-    .code-banner-icon { font-size: 28px; flex-shrink: 0; }
-    .code-banner-label { font-size: 12px; color: rgba(255,255,255,.7); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
-    .code-banner-value { font-size: 20px; font-weight: 800; letter-spacing: 2px; font-family: monospace; }
-    .code-banner-note { font-size: 12px; color: rgba(255,255,255,.65); margin-top: 2px; }
+    /* ── Sección ── */
+    .section-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #64748b; margin: 2rem 0 .8rem; padding-left: 2px; display: flex; align-items: center; gap: .5rem; }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: #e2e8f0; }
 
-    /* Steps */
-    .section-title {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .1em;
-      color: #64748b;
-      margin: 2.2rem 0 .9rem;
-      padding-left: 4px;
-    }
-    .step-card {
-      background: white;
-      border: 1px solid #e2e8f0;
-      border-radius: 14px;
-      padding: 1.3rem 1.5rem;
-      margin-bottom: .85rem;
-      display: flex;
-      gap: 1.1rem;
-      align-items: flex-start;
-    }
-    .step-num {
-      width: 32px; height: 32px;
-      background: #3b82f6;
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 13px; font-weight: 800; color: white;
-      flex-shrink: 0;
-      margin-top: 1px;
-    }
-    .step-num.purple { background: #7c3aed; }
-    .step-num.green  { background: #10b981; }
-    .step-num.orange { background: #f59e0b; }
-    .step-body h3 { font-size: 14.5px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
-    .step-body p  { font-size: 13px; color: #475569; }
-    .step-body code {
-      background: #f1f5f9;
-      border: 1px solid #e2e8f0;
-      border-radius: 5px;
-      padding: 1px 6px;
-      font-size: 12.5px;
-      font-family: 'Courier New', monospace;
-      color: #1e293b;
-    }
-    .step-body ul { margin: 6px 0 0 18px; }
-    .step-body li { font-size: 13px; color: #475569; margin-bottom: 3px; }
+    /* ── Cards ── */
+    .card { background: white; border: 1px solid #e2e8f0; border-radius: 13px; padding: 1.1rem 1.3rem; margin-bottom: .7rem; display: flex; gap: 1rem; align-items: flex-start; }
+    .num { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: white; flex-shrink: 0; margin-top: 1px; }
+    .num.blue   { background: #3b82f6; }
+    .num.purple { background: #7c3aed; }
+    .num.green  { background: #10b981; }
+    .num.dark   { background: #1e293b; }
+    .card h3 { font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 3px; }
+    .card p, .card li { font-size: 13px; color: #475569; }
+    .card ul { margin: 5px 0 0 16px; }
+    .card li { margin-bottom: 3px; }
+    code { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 1px 6px; font-size: 12px; font-family: monospace; color: #1e293b; }
 
-    /* Tip */
-    .tip {
-      background: #f0fdf4;
-      border-left: 3px solid #10b981;
-      border-radius: 0 10px 10px 0;
-      padding: .8rem 1.1rem;
-      font-size: 12.5px;
-      color: #065f46;
-      margin: .5rem 0 .5rem 43px;
-    }
-    .warn {
-      background: #fffbeb;
-      border-left: 3px solid #f59e0b;
-      border-radius: 0 10px 10px 0;
-      padding: .8rem 1.1rem;
-      font-size: 12.5px;
-      color: #92400e;
-      margin: .5rem 0 .5rem 43px;
-    }
+    /* ── Tips ── */
+    .tip  { background: #f0fdf4; border-left: 3px solid #10b981; border-radius: 0 10px 10px 0; padding: .7rem 1rem; font-size: 12.5px; color: #065f46; margin: .4rem 0 .4rem 42px; }
+    .warn { background: #fffbeb; border-left: 3px solid #f59e0b; border-radius: 0 10px 10px 0; padding: .7rem 1rem; font-size: 12.5px; color: #92400e; margin: .4rem 0 .4rem 42px; }
+    .info { background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 0 10px 10px 0; padding: .7rem 1rem; font-size: 12.5px; color: #1e40af; margin: .4rem 0 .4rem 42px; }
 
-    /* Telegram box */
-    .tg-card {
-      background: #0f172a;
-      border-radius: 14px;
-      padding: 1.4rem 1.5rem;
-      margin-bottom: .85rem;
-      color: white;
-    }
-    .tg-card h3 { font-size: 14.5px; font-weight: 700; margin-bottom: .6rem; display: flex; align-items: center; gap: .5rem; }
+    /* ── Flujos visuales ── */
+    .flow-box { background: #0f172a; border-radius: 13px; padding: 1.2rem 1.4rem; margin-bottom: .7rem; }
+    .flow-title { font-size: 13px; font-weight: 700; color: #f1f5f9; margin-bottom: .9rem; display: flex; align-items: center; gap: .5rem; }
+    .flow-steps { display: flex; flex-direction: column; gap: .5rem; }
+    .flow-step { display: flex; align-items: flex-start; gap: .75rem; }
+    .flow-dot { width: 22px; height: 22px; border-radius: 50%; background: #1e3a5f; border: 2px solid #3b82f6; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #3b82f6; flex-shrink: 0; margin-top: 1px; }
+    .flow-dot.green  { background: #052e16; border-color: #10b981; color: #10b981; }
+    .flow-dot.purple { background: #2e1065; border-color: #8b5cf6; color: #8b5cf6; }
+    .flow-dot.orange { background: #431407; border-color: #f97316; color: #f97316; }
+    .flow-text { font-size: 12.5px; color: #94a3b8; }
+    .flow-text strong { color: #f1f5f9; }
+    .flow-arrow { text-align: center; color: #334155; font-size: 11px; padding: 0 0 0 30px; }
+
+    /* ── Telegram card ── */
+    .tg-card { background: #0f172a; border-radius: 13px; padding: 1.3rem 1.4rem; margin-bottom: .7rem; }
+    .tg-card h3 { color: #f1f5f9; font-size: 14px; font-weight: 700; margin-bottom: .7rem; }
     .tg-card p, .tg-card li { font-size: 13px; color: #94a3b8; }
-    .tg-card ul { margin: .5rem 0 0 18px; }
+    .tg-card ul { margin: .5rem 0 0 16px; }
     .tg-card li { margin-bottom: 4px; }
-    .tg-bot { display: inline-block; background: #1d4ed8; color: white; border-radius: 6px; padding: 2px 10px; font-size: 13px; font-weight: 700; margin: .5rem 0; }
-    .tg-chat-id {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      padding: .7rem 1rem;
-      font-size: 12px;
-      color: #94a3b8;
-      margin-top: .7rem;
-    }
-    .tg-chat-id strong { color: #f1f5f9; }
+    .tg-card strong { color: #f1f5f9; }
+    .tg-bot { display: inline-block; background: #1d4ed8; color: white; border-radius: 6px; padding: 2px 9px; font-size: 12.5px; font-weight: 700; }
+    .tg-msg { background: #1e293b; border-radius: 8px; padding: .65rem .9rem; font-size: 12.5px; color: #cbd5e1; margin-top: .7rem; font-family: monospace; }
+    .tg-msg .cmd { color: #60a5fa; font-weight: 700; }
 
-    /* Footer */
-    .footer {
-      text-align: center;
-      margin-top: 2.5rem;
-      font-size: 12px;
-      color: #94a3b8;
-    }
+    /* ── Renovación tokens ── */
+    .token-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; margin-bottom: .7rem; }
+    .token-item { background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: .9rem 1rem; }
+    .token-item .icon { font-size: 20px; margin-bottom: 5px; }
+    .token-item h4 { font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 3px; }
+    .token-item p { font-size: 12px; color: #64748b; }
+
+    /* ── Resumen final ── */
+    .summary { background: linear-gradient(135deg, #7c3aed, #4f46e5); border-radius: 13px; padding: 1.3rem 1.5rem; color: white; margin-top: 2rem; }
+    .summary h3 { font-size: 15px; font-weight: 800; margin-bottom: .8rem; }
+    .summary li { font-size: 13px; color: rgba(255,255,255,.85); margin-bottom: 5px; list-style: none; padding-left: 1.3rem; position: relative; }
+    .summary li::before { content: '✓'; position: absolute; left: 0; color: #a5f3fc; font-weight: 700; }
+
+    .footer { text-align: center; margin-top: 2.5rem; font-size: 11.5px; color: #94a3b8; }
   </style>
 </head>
 <body>
@@ -179,185 +90,235 @@
 
   <!-- HEADER -->
   <div class="header">
-    <div class="header-logo">CB</div>
+    <div class="logo">CB</div>
     <div>
-      <h1>Guía de inicio — ContaBot</h1>
-      <p>Para que el contador configure su cuenta y empiece a usar el sistema</p>
+      <h1>ContaBot — Guía para la reunión de hoy</h1>
+      <p>Flujos completos: registro, Gmail, Telegram y renovación de tokens</p>
     </div>
   </div>
 
-  <!-- URL -->
-  <div class="url-box">
-    <div class="url-label">Acceso</div>
-    <div class="url-value">https://contabot-demo-production.up.railway.app</div>
-  </div>
-
-  <!-- CÓDIGO DE ACCESO -->
-  <div class="code-banner">
-    <div class="code-banner-icon">🔑</div>
-    <div>
-      <div class="code-banner-label">Código de acceso para registro</div>
-      <div class="code-banner-value">ContaBot2026</div>
-      <div class="code-banner-note">Compártelo solo con contadores autorizados · No publicar</div>
+  <!-- ACCESOS -->
+  <div class="accesos">
+    <div class="acceso-box">
+      <div class="acceso-label">URL del sistema</div>
+      <div class="acceso-value">contabot-demo-production.up.railway.app</div>
+      <div class="acceso-sub">Abrir en Chrome</div>
+    </div>
+    <div class="acceso-box">
+      <div class="acceso-label">Código de registro</div>
+      <div class="acceso-value">ContaBot2026</div>
+      <div class="acceso-sub">Solo para contadores autorizados</div>
+    </div>
+    <div class="acceso-box">
+      <div class="acceso-label">Bot de Telegram</div>
+      <div class="acceso-value">@contabot_contador_bot</div>
+      <div class="acceso-sub">Buscar en Telegram</div>
+    </div>
+    <div class="acceso-box">
+      <div class="acceso-label">Gmail requerido</div>
+      <div class="acceso-value">@gmail.com por empresa</div>
+      <div class="acceso-sub">1 correo Gmail por cliente</div>
     </div>
   </div>
 
-  <!-- PASO 1: REGISTRO -->
-  <div class="section-title">Paso 1 — Crear la cuenta</div>
+  <!-- ══════════════════════════════════════════════════════
+       FLUJO 1: REGISTRO
+  ══════════════════════════════════════════════════════ -->
+  <div class="section-title">1 · Crear cuenta en ContaBot</div>
 
-  <div class="step-card">
-    <div class="step-num">1</div>
-    <div class="step-body">
-      <h3>Abrir la URL en el navegador</h3>
-      <p>Entrar a <code>contabot-demo-production.up.railway.app</code> desde Chrome o cualquier navegador.</p>
+  <div class="flow-box">
+    <div class="flow-title">📋 Registro inicial (una sola vez)</div>
+    <div class="flow-steps">
+      <div class="flow-step"><div class="flow-dot">1</div><div class="flow-text">Abrir la URL → pestaña <strong>"Crear cuenta"</strong></div></div>
+      <div class="flow-step"><div class="flow-dot">2</div><div class="flow-text">Llenar: nombre, email, contraseña (min 8 caracteres)</div></div>
+      <div class="flow-step"><div class="flow-dot">3</div><div class="flow-text">Campo <strong>"Código de acceso"</strong> → escribir <strong>ContaBot2026</strong></div></div>
+      <div class="flow-step"><div class="flow-dot green">4</div><div class="flow-text"><strong>Listo</strong> — queda dentro del sistema automáticamente</div></div>
     </div>
   </div>
 
-  <div class="step-card">
-    <div class="step-num">2</div>
-    <div class="step-body">
-      <h3>Clic en "Crear cuenta"</h3>
-      <p>En la pantalla de inicio de sesión, hacer clic en la pestaña <strong>"Crear cuenta"</strong>.</p>
-    </div>
-  </div>
+  <div class="tip">El sistema es multi-contador: cada contador solo ve sus propias empresas. Nadie ve los datos del otro.</div>
 
-  <div class="step-card">
-    <div class="step-num">3</div>
-    <div class="step-body">
-      <h3>Llenar el formulario de registro</h3>
-      <ul>
-        <li><strong>Nombre completo:</strong> el nombre del contador</li>
-        <li><strong>Nombre del estudio:</strong> opcional (p. ej. "Asesorías Ramírez")</li>
-        <li><strong>T.P. y teléfono:</strong> opcionales</li>
-        <li><strong>Email:</strong> el correo del contador (será su usuario)</li>
-        <li><strong>Contraseña:</strong> mínimo 8 caracteres, inventar una propia</li>
-        <li><strong>Código de acceso:</strong> <code>ContaBot2026</code></li>
-      </ul>
-    </div>
-  </div>
-
-  <div class="tip">✅ Una vez creada la cuenta, el contador queda dentro del sistema automáticamente.</div>
-
-  <!-- PASO 2: EMPRESA -->
-  <div class="section-title">Paso 2 — Agregar la primera empresa cliente</div>
-
-  <div class="step-card">
-    <div class="step-num purple">4</div>
-    <div class="step-body">
-      <h3>Ir a la sección "Empresas"</h3>
-      <p>Es la pantalla principal al entrar. Hacer clic en el botón <strong>"+ Nueva empresa"</strong> (esquina superior derecha).</p>
-    </div>
-  </div>
-
-  <div class="step-card">
-    <div class="step-num purple">5</div>
-    <div class="step-body">
-      <h3>Llenar los datos de la empresa</h3>
-      <ul>
-        <li><strong>NIT:</strong> sin dígito verificador (p. ej. <code>900456789</code>)</li>
-        <li><strong>Razón social:</strong> nombre de la empresa</li>
-        <li><strong>Régimen:</strong> Jurídica / Gran Contribuyente / Natural / Simple / responsable_iva</li>
-        <li><strong>Ciudad:</strong> para el cálculo de ICA</li>
-        <li><strong>Correo de contacto:</strong> opcional, para emails de cobro</li>
-      </ul>
-    </div>
-  </div>
-
-  <div class="tip">Una empresa puede tener su Gmail conectado para recibir facturas automáticamente (siguiente paso).</div>
-
-  <!-- PASO 3: GMAIL -->
-  <div class="section-title">Paso 3 — Conectar Gmail por empresa (para recibir facturas automático)</div>
-
-  <div class="step-card">
-    <div class="step-num green">6</div>
-    <div class="step-body">
-      <h3>Entrar a la empresa → subtab "Gmail"</h3>
-      <p>Hacer clic en la empresa → abrir la pestaña <strong>"Gmail"</strong> dentro del dashboard de esa empresa.</p>
-    </div>
-  </div>
-
-  <div class="step-card">
-    <div class="step-num green">7</div>
-    <div class="step-body">
-      <h3>Solicitar al cliente el correo Gmail</h3>
-      <p>El cliente debe tener una cuenta Gmail donde llegan las facturas electrónicas de la DIAN. ContaBot solo funciona con Gmail (no Outlook, no correo corporativo).</p>
-    </div>
-  </div>
-
-  <div class="step-card">
-    <div class="step-num green">8</div>
-    <div class="step-body">
-      <h3>Clic en "Conectar Gmail" → autorizar</h3>
-      <p>Se abre la ventana de Google. Seleccionar la cuenta Gmail del cliente y hacer clic en <strong>"Permitir"</strong>. Desde ese momento, ContaBot empieza a monitorear ese correo automáticamente.</p>
-    </div>
-  </div>
-
-  <div class="warn">⚠️ El correo debe ser Gmail (@gmail.com o Google Workspace). El cliente debe autorizar el acceso desde su cuenta. El acceso tiene vigencia de 7 días y ContaBot notifica cuando está por vencer.</div>
-
-  <!-- TELEGRAM -->
-  <div class="section-title">Paso 4 — Configurar Telegram (notificaciones)</div>
+  <!-- ══════════════════════════════════════════════════════
+       FLUJO 2: TELEGRAM
+  ══════════════════════════════════════════════════════ -->
+  <div class="section-title">2 · Vincular Telegram (recibir todas las notificaciones)</div>
 
   <div class="tg-card">
-    <h3>🤖 Bot de Telegram — 2 pasos</h3>
-    <p>ContaBot le avisa en el celular cada vez que llega una factura, hay una empresa desconocida, o se acerca una fecha tributaria. Desde Telegram puede asignar facturas directamente con un botón.</p>
-    <br>
-    <p><strong>Paso 1 — Buscar el bot:</strong></p>
+    <h3>🤖 Pasos para vincular — 2 minutos</h3>
     <ul>
-      <li>Abrir Telegram</li>
-      <li>Buscar: <span class="tg-bot">@contabot_contador_bot</span></li>
-      <li>Tocar <strong>"Iniciar"</strong></li>
+      <li>Abrir Telegram → buscar <span class="tg-bot">@contabot_contador_bot</span> → tocar <strong>Iniciar</strong></li>
+      <li>El bot responde con instrucciones</li>
+      <li>Enviar el comando con el email registrado:</li>
     </ul>
+    <div class="tg-msg"><span class="cmd">/vincular</span> eduardo@gmail.com</div>
     <br>
-    <p><strong>Paso 2 — Vincular la cuenta:</strong></p>
-    <ul>
-      <li>El bot mostrará instrucciones</li>
-      <li>Enviar el comando: <code>/vincular su@email.com</code></li>
-      <li>El bot confirma: <em>"¡Hola [nombre]! Tu cuenta quedó vinculada."</em></li>
-      <li>Listo — todas las notificaciones llegarán a ese chat</li>
-    </ul>
+    <p>El bot confirma: <em>"¡Hola Eduardo! Tu cuenta ContaBot quedó vinculada."</em></p>
+    <p style="margin-top:.5rem">Desde ese momento <strong>todas las notificaciones llegan a ese chat</strong>. No hay que configurar nada más.</p>
+  </div>
 
-    <div class="tg-chat-id">
-      <strong>¿Qué email poner?</strong> El mismo con el que se registró en ContaBot.<br><br>
-      Ejemplo: <code>/vincular eduardo@gmail.com</code><br><br>
-      No hay que tocar ninguna variable ni configuración adicional. El sistema lo reconoce automáticamente.
+  <div class="section-title">Qué llega por Telegram y cuándo</div>
+
+  <div class="card">
+    <div class="num blue">📥</div>
+    <div>
+      <h3>Factura nueva registrada</h3>
+      <p>Cada vez que llega una factura por Gmail automático, o cuando el contador sube una manualmente desde el dashboard.</p>
+      <p style="margin-top:4px">Muestra: cliente, proveedor, número de factura, total.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="num purple">⚠️</div>
+    <div>
+      <h3>Empresa desconocida — con botones de asignación</h3>
+      <p>Cuando llega una factura y el NIT del receptor no corresponde a ninguna empresa registrada.</p>
+      <p style="margin-top:4px">El mensaje incluye <strong>botones con las empresas</strong>: el contador toca el nombre y la factura queda asignada directamente desde Telegram, sin abrir el dashboard.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="num green">🔑</div>
+    <div>
+      <h3>Token Gmail por vencer — con link de renovación</h3>
+      <p>Aviso automático el día 6 de 7, por cada correo de cliente conectado. Incluye el link directo para renovar en 30 segundos.</p>
+      <p style="margin-top:4px">Si hay 7 correos de clientes → llegan hasta 7 avisos en días distintos.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="num dark">📅</div>
+    <div>
+      <h3>Obligaciones tributarias próximas</h3>
+      <p>Recordatorio automático diario de declaraciones que vencen en los próximos 7 días (F-300, F-350, ICA, Renta).</p>
+      <p style="margin-top:4px">También se puede enviar manualmente desde el Calendario → botón "Enviar a Telegram".</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       FLUJO 3: GMAIL
+  ══════════════════════════════════════════════════════ -->
+  <div class="section-title">3 · Conectar Gmail por empresa (7 correos = 7 veces)</div>
+
+  <div class="flow-box">
+    <div class="flow-title">📧 Conectar un correo Gmail de cliente</div>
+    <div class="flow-steps">
+      <div class="flow-step"><div class="flow-dot">1</div><div class="flow-text">Crear la empresa en ContaBot (NIT + razón social)</div></div>
+      <div class="flow-step"><div class="flow-dot">2</div><div class="flow-text">Entrar a la empresa → pestaña <strong>"Gmail"</strong></div></div>
+      <div class="flow-step"><div class="flow-dot">3</div><div class="flow-text">Clic en <strong>"Conectar Gmail"</strong> → se abre Google</div></div>
+      <div class="flow-step"><div class="flow-dot">4</div><div class="flow-text">Seleccionar el correo Gmail del cliente → <strong>"Permitir"</strong></div></div>
+      <div class="flow-step"><div class="flow-dot green">5</div><div class="flow-text"><strong>Listo</strong> — ContaBot monitorea ese correo en tiempo real</div></div>
+    </div>
+  </div>
+
+  <div class="warn">⚠️ Solo funciona con correos Gmail (@gmail.com o Google Workspace). Outlook, Hotmail y correos corporativos propios no son compatibles.</div>
+  <div class="info">Si el correo le pertenece al cliente, el contador debe coordinarlo con él: el cliente autoriza el acceso una vez, desde su cuenta.</div>
+
+  <!-- ══════════════════════════════════════════════════════
+       FLUJO 4: RENOVACIÓN DE TOKENS
+  ══════════════════════════════════════════════════════ -->
+  <div class="section-title">4 · Renovación del acceso Gmail cada 7 días</div>
+
+  <div class="flow-box">
+    <div class="flow-title">🔄 Cómo funciona la renovación (automática + aviso)</div>
+    <div class="flow-steps">
+      <div class="flow-step"><div class="flow-dot orange">D6</div><div class="flow-text"><strong>Día 6 de 7</strong> — ContaBot detecta que el token va a vencer</div></div>
+      <div class="flow-step"><div class="flow-dot orange">📱</div><div class="flow-text">Llega mensaje de Telegram: empresa, correo del cliente, y <strong>link directo de renovación</strong></div></div>
+      <div class="flow-step"><div class="flow-dot orange">🔗</div><div class="flow-text">El contador toca el link → se abre la página de Google</div></div>
+      <div class="flow-step"><div class="flow-dot green">✓</div><div class="flow-text">Clic en <strong>"Permitir"</strong> → token renovado por otros 7 días</div></div>
+    </div>
+  </div>
+
+  <div class="token-grid">
+    <div class="token-item">
+      <div class="icon">⏱️</div>
+      <h4>Vigencia del token</h4>
+      <p>7 días por correo. Después hay que renovar manualmente.</p>
+    </div>
+    <div class="token-item">
+      <div class="icon">🔔</div>
+      <h4>Aviso automático</h4>
+      <p>Llega al Telegram del contador el día 6 — no hay que recordarlo.</p>
+    </div>
+    <div class="token-item">
+      <div class="icon">📧</div>
+      <h4>Con 7 correos</h4>
+      <p>Hasta 7 avisos por semana, uno por empresa, en días distintos.</p>
+    </div>
+    <div class="token-item">
+      <div class="icon">⚡</div>
+      <h4>Tiempo de renovación</h4>
+      <p>30 segundos: tocar link → clic en Permitir → listo.</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       FLUJO 5: DASHBOARD
+  ══════════════════════════════════════════════════════ -->
+  <div class="section-title">5 · Qué hay en el dashboard</div>
+
+  <div class="card">
+    <div class="num blue">🏢</div>
+    <div>
+      <h3>Empresas — pantalla principal</h3>
+      <p>Lista de todas las empresas cliente. KPIs globales arriba (total facturas, ventas, gastos, saldo). Clic en una empresa para entrar a su detalle.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="num blue">📊</div>
+    <div>
+      <h3>Dentro de cada empresa — 7 subtabs</h3>
+      <ul>
+        <li><strong>Ventas</strong> — facturas emitidas por la empresa, con filtros</li>
+        <li><strong>Gastos</strong> — facturas de proveedores recibidas</li>
+        <li><strong>Retenciones</strong> — Retefuente, ReteIVA, ReteICA por cliente</li>
+        <li><strong>Declaraciones</strong> — F-300 IVA, F-350 Retefuente, ICA, Renta</li>
+        <li><strong>Gmail</strong> — estado del correo conectado, renovar token</li>
+        <li><strong>Archivos</strong> — XMLs y PDFs almacenados en la nube</li>
+        <li><strong>Conciliar DIAN</strong> — cruzar contra el Excel del portal DIAN</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="num purple">⬆️</div>
+    <div>
+      <h3>Subir factura manualmente</h3>
+      <p>Botón en el menú lateral → sube PDF, XML o ZIP → ContaBot extrae los datos automáticamente → notificación llega a Telegram.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="num green">📥</div>
+    <div>
+      <h3>Bandeja Pendiente</h3>
+      <p>Facturas cuya empresa no pudo identificarse por NIT. Muestra el correo Gmail donde llegó. El contador asigna la empresa manualmente (o lo hace directo desde Telegram con los botones).</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="num green">📊</div>
+    <div>
+      <h3>Exportar a Excel — 6 hojas</h3>
+      <p>Desde la pestaña Declaraciones de cada empresa: VENTAS · COMPRAS · IVA F-300 · RFTE 350 · ICA · RENTA. Listo para revisar y presentar.</p>
     </div>
   </div>
 
   <!-- RESUMEN -->
-  <div class="section-title">¿Cómo funciona el flujo una vez configurado?</div>
-
-  <div class="step-card">
-    <div class="step-num orange">✓</div>
-    <div class="step-body">
-      <h3>Flujo automático</h3>
-      <ul>
-        <li>Llega factura al Gmail del cliente → ContaBot la extrae → la guarda en la empresa correcta</li>
-        <li>Si el NIT no coincide con ninguna empresa → va a "Bandeja Pendiente" + notificación Telegram</li>
-        <li>El contador abre ContaBot → asigna la factura desde la Bandeja Pendiente</li>
-        <li>Al fin de período → ver Declaraciones → descargar Excel → presentar</li>
-      </ul>
-    </div>
-  </div>
-
-  <!-- CREDENCIALES RESUMEN -->
-  <div class="section-title">Resumen de accesos</div>
-
-  <div class="step-card">
-    <div class="step-num">📋</div>
-    <div class="step-body">
-      <h3>Datos para guardar</h3>
-      <ul>
-        <li><strong>URL sistema:</strong> <code>contabot-demo-production.up.railway.app</code></li>
-        <li><strong>Código de registro (confidencial):</strong> <code>ContaBot2026</code></li>
-        <li><strong>Bot Telegram:</strong> <code>@contabot_contador_bot</code></li>
-        <li><strong>Contraseña mínima:</strong> 8 caracteres (la elige el contador)</li>
-        <li><strong>Gmail requerido por empresa:</strong> cuenta Google del cliente</li>
-      </ul>
-    </div>
+  <div class="summary">
+    <h3>Resumen del setup completo para Eduardo</h3>
+    <ul>
+      <li>Entrar a la URL → "Crear cuenta" → código <strong>ContaBot2026</strong></li>
+      <li>Telegram: buscar <strong>@contabot_contador_bot</strong> → /vincular su@email.com</li>
+      <li>Por cada empresa: crearla → pestaña Gmail → "Conectar Gmail" → autorizar el correo del cliente</li>
+      <li>Desde ese día: facturas llegan solas, Telegram avisa todo</li>
+      <li>Cada 6 días: aviso en Telegram con link de renovación por cada correo</li>
+      <li>Al cierre del período: Declaraciones → descargar Excel → presentar</li>
+    </ul>
   </div>
 
   <div class="footer">
-    ContaBot · Automatización contable colombiana · Documento interno
+    ContaBot · Automatización contable colombiana · Reunión 30 Jun 2026
   </div>
 
 </div>
