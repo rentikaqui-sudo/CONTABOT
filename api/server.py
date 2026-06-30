@@ -2748,34 +2748,63 @@ def telegram_webhook():
     update = request.get_json(silent=True) or {}
     token_bot = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
-    # Manejar mensajes de texto — vinculación via /start TOKEN
+    # Manejar mensajes de texto
     if "message" in update:
         msg          = update["message"]
-        text         = msg.get("text", "")
+        text         = (msg.get("text") or "").strip()
         from_chat_id = str(msg["chat"]["id"])
+        from telegram_notif import _send as _tg_send
+
+        def _vincular(contador_row):
+            """Guarda el chat_id en el contador y confirma."""
+            sb.table("contadores").update({
+                "telegram_chat_id": from_chat_id,
+                "telegram_token":   None,
+            }).eq("id", contador_row["id"]).execute()
+            _tg_send(token_bot, from_chat_id,
+                f"✅ ¡Hola {contador_row['nombre']}! Tu cuenta ContaBot quedó vinculada.\n\n"
+                "🔔 Desde ahora recibirás aquí:\n"
+                "• Facturas nuevas (correo automático y subidas manuales)\n"
+                "• Aviso de empresa desconocida con selector de cliente directo\n"
+                "• Alerta cuando el acceso Gmail esté por vencer\n"
+                "• Recordatorios de obligaciones tributarias próximas\n\n"
+                "Puedes responder a los botones directamente desde Telegram.")
+
+        # /start — con o sin token de deep-link
         if text.startswith("/start"):
             parts      = text.split(None, 1)
             link_token = parts[1].strip() if len(parts) > 1 else ""
-            from telegram_notif import _send as _tg_send
             if link_token:
                 rows = sb.table("contadores").select("id,nombre").eq("telegram_token", link_token).execute().data
                 if rows:
-                    c = rows[0]
-                    sb.table("contadores").update({
-                        "telegram_chat_id": from_chat_id,
-                        "telegram_token":   None,
-                    }).eq("id", c["id"]).execute()
-                    _tg_send(token_bot, from_chat_id,
-                        f"✅ ¡Hola {c['nombre']}! Tu cuenta ContaBot quedó vinculada.\n\n"
-                        "🔔 Desde ahora recibirás aquí:\n"
-                        "• Facturas nuevas (correo automático y subidas manuales)\n"
-                        "• Avisos de empresa desconocida con selector de cliente\n"
-                        "• Alertas cuando el acceso Gmail esté por vencer\n"
-                        "• Recordatorios de obligaciones tributarias próximas")
+                    _vincular(rows[0])
                 else:
                     _tg_send(token_bot, from_chat_id,
                         "⚠️ Enlace inválido o ya utilizado.\n"
-                        "Genera un nuevo enlace desde ContaBot → Conectar Telegram.")
+                        "Usa /vincular tu@email.com para conectarte.")
+            else:
+                _tg_send(token_bot, from_chat_id,
+                    "👋 Hola, soy ContaBot.\n\n"
+                    "Para recibir notificaciones de tus clientes, envía:\n"
+                    "  /vincular tu@email.com\n\n"
+                    "(El email debe ser el que usaste para registrarte en ContaBot)")
+
+        # /vincular email — forma directa sin necesitar el dashboard
+        elif text.lower().startswith("/vincular"):
+            parts = text.split(None, 1)
+            email = parts[1].strip().lower() if len(parts) > 1 else ""
+            if not email or "@" not in email:
+                _tg_send(token_bot, from_chat_id,
+                    "Por favor indica tu email:\n  /vincular tu@email.com")
+            else:
+                rows = sb.table("contadores").select("id,nombre").eq("email", email).execute().data
+                if rows:
+                    _vincular(rows[0])
+                else:
+                    _tg_send(token_bot, from_chat_id,
+                        f"⚠️ No encontré ninguna cuenta con el email `{email}`.\n"
+                        "Verifica que sea el mismo email con el que te registraste en ContaBot.")
+
         return jsonify({"ok": True})
 
     if "callback_query" not in update:

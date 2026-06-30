@@ -298,21 +298,28 @@
   <div class="section-title">Paso 4 — Configurar Telegram (notificaciones)</div>
 
   <div class="tg-card">
-    <h3>🤖 Bot de Telegram</h3>
-    <p>ContaBot envía notificaciones al celular cada vez que llega una factura nueva, hay una empresa desconocida o se acerca una fecha tributaria.</p>
+    <h3>🤖 Bot de Telegram — 2 pasos</h3>
+    <p>ContaBot le avisa en el celular cada vez que llega una factura, hay una empresa desconocida, o se acerca una fecha tributaria. Desde Telegram puede asignar facturas directamente con un botón.</p>
     <br>
-    <p><strong>Para activarlo:</strong></p>
+    <p><strong>Paso 1 — Buscar el bot:</strong></p>
     <ul>
-      <li>Abrir Telegram en el celular</li>
-      <li>Buscar el bot: <span class="tg-bot">@contabot_contador_bot</span></li>
-      <li>Hacer clic en <strong>"Iniciar"</strong> o escribir <code>/start</code></li>
-      <li>El bot responderá con un mensaje de bienvenida</li>
+      <li>Abrir Telegram</li>
+      <li>Buscar: <span class="tg-bot">@contabot_contador_bot</span></li>
+      <li>Tocar <strong>"Iniciar"</strong></li>
+    </ul>
+    <br>
+    <p><strong>Paso 2 — Vincular la cuenta:</strong></p>
+    <ul>
+      <li>El bot mostrará instrucciones</li>
+      <li>Enviar el comando: <code>/vincular su@email.com</code></li>
+      <li>El bot confirma: <em>"¡Hola [nombre]! Tu cuenta quedó vinculada."</em></li>
+      <li>Listo — todas las notificaciones llegarán a ese chat</li>
     </ul>
 
     <div class="tg-chat-id">
-      <strong>Para recibir las notificaciones en su celular</strong>, el contador debe enviarle al administrador del sistema su <em>Chat ID</em> de Telegram.<br><br>
-      Cómo obtenerlo: abrir <code>@userinfobot</code> en Telegram → enviar cualquier mensaje → el bot responde con el ID numérico.<br><br>
-      El administrador actualiza ese número en Railway → desde ahí el bot le llegará al contador.
+      <strong>¿Qué email poner?</strong> El mismo con el que se registró en ContaBot.<br><br>
+      Ejemplo: <code>/vincular eduardo@gmail.com</code><br><br>
+      No hay que tocar ninguna variable ni configuración adicional. El sistema lo reconoce automáticamente.
     </div>
   </div>
 
