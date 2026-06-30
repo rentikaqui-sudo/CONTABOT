@@ -759,6 +759,20 @@ let contadorNombre = 'el contador';
 
 document.addEventListener('DOMContentLoaded', () => {
   fetch('/api/me').then(r => r.json()).then(u => { if (u.nombre) contadorNombre = u.nombre; }).catch(() => {});
+  // Estado del botón Telegram
+  fetch('/api/telegram/status').then(r => r.json()).then(s => {
+    const btn = document.getElementById('tg-btn');
+    if (btn) {
+      if (s.connected) {
+        btn.textContent = '✅ Telegram';
+        btn.title = 'Telegram vinculado — clic para desconectar';
+        btn.style.background = 'rgba(16,185,129,.25)';
+      } else {
+        btn.textContent = '🔔 Telegram';
+        btn.title = 'Vincular Telegram para recibir notificaciones';
+      }
+    }
+  }).catch(() => {});
   loadInicio();
   initFormManual();
   // Verificar pendientes al cargar para mostrar badge
@@ -773,6 +787,36 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => abrirOnboarding(), 800);
   }
 });
+
+// ── Telegram vinculación ─────────────────────────────────────────────────────
+
+async function gestionarTelegram() {
+  const btn = document.getElementById('tg-btn');
+  // Si ya está conectado, preguntar si desconectar
+  const statusRes = await fetch('/api/telegram/status').then(r => r.json()).catch(() => ({}));
+  if (statusRes.connected) {
+    if (!confirm('Tu Telegram ya está vinculado. ¿Deseas desconectarlo?')) return;
+    await fetch('/api/telegram/desconectar', { method: 'POST' });
+    if (btn) { btn.textContent = '🔔 Telegram'; btn.style.background = 'rgba(255,255,255,.12)'; btn.title = 'Vincular Telegram'; }
+    return;
+  }
+  // Generar enlace de vinculación y abrirlo
+  if (btn) btn.textContent = '…';
+  try {
+    const res = await fetch('/api/telegram/generar-link', { method: 'POST' }).then(r => r.json());
+    if (res.ok && res.link) {
+      window.open(res.link, '_blank');
+      if (btn) btn.textContent = '🔔 Telegram';
+      // Reaplicar estado tras 5s (puede que ya vinculó)
+      setTimeout(async () => {
+        const s2 = await fetch('/api/telegram/status').then(r => r.json()).catch(() => ({}));
+        if (btn && s2.connected) { btn.textContent = '✅ Telegram'; btn.style.background = 'rgba(16,185,129,.25)'; }
+      }, 5000);
+    }
+  } catch {
+    if (btn) btn.textContent = '🔔 Telegram';
+  }
+}
 
 // ── LOGIN redirect ────────────────────────────────────────────────────────────
 // (el login es solo visual, no hay sesión real en la demo)

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ContaBot — Guía de inicio para contadores</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      line-height: 1.6;
+    }
+    .page {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    @media print {
+      body { background: white; }
+      .page { padding: 1rem; }
+      .step-card { break-inside: avoid; }
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #1e293b, #334155);
+      color: white;
+      border-radius: 16px;
+      padding: 2rem 2.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    .header-logo {
+      width: 56px; height: 56px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 18px; color: white;
+      flex-shrink: 0;
+    }
+    .header h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+    .header p { font-size: 13px; color: #94a3b8; }
+
+    /* URL destacada */
+    .url-box {
+      background: #0f172a;
+      border: 1.5px solid #3b82f6;
+      border-radius: 12px;
+      padding: 1.1rem 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .url-label { font-size: 11px; font-weight: 700; color: #3b82f6; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+    .url-value { font-size: 15px; font-weight: 700; color: #f1f5f9; letter-spacing: 0.3px; word-break: break-all; }
+
+    /* Código de acceso */
+    .code-banner {
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      border-radius: 12px;
+      padding: 1.2rem 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+      color: white;
+    }
+    .code-banner-icon { font-size: 28px; flex-shrink: 0; }
+    .code-banner-label { font-size: 12px; color: rgba(255,255,255,.7); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+    .code-banner-value { font-size: 20px; font-weight: 800; letter-spacing: 2px; font-family: monospace; }
+    .code-banner-note { font-size: 12px; color: rgba(255,255,255,.65); margin-top: 2px; }
+
+    /* Steps */
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: #64748b;
+      margin: 2.2rem 0 .9rem;
+      padding-left: 4px;
+    }
+    .step-card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 1.3rem 1.5rem;
+      margin-bottom: .85rem;
+      display: flex;
+      gap: 1.1rem;
+      align-items: flex-start;
+    }
+    .step-num {
+      width: 32px; height: 32px;
+      background: #3b82f6;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800; color: white;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .step-num.purple { background: #7c3aed; }
+    .step-num.green  { background: #10b981; }
+    .step-num.orange { background: #f59e0b; }
+    .step-body h3 { font-size: 14.5px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
+    .step-body p  { font-size: 13px; color: #475569; }
+    .step-body code {
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 5px;
+      padding: 1px 6px;
+      font-size: 12.5px;
+      font-family: 'Courier New', monospace;
+      color: #1e293b;
+    }
+    .step-body ul { margin: 6px 0 0 18px; }
+    .step-body li { font-size: 13px; color: #475569; margin-bottom: 3px; }
+
+    /* Tip */
+    .tip {
+      background: #f0fdf4;
+      border-left: 3px solid #10b981;
+      border-radius: 0 10px 10px 0;
+      padding: .8rem 1.1rem;
+      font-size: 12.5px;
+      color: #065f46;
+      margin: .5rem 0 .5rem 43px;
+    }
+    .warn {
+      background: #fffbeb;
+      border-left: 3px solid #f59e0b;
+      border-radius: 0 10px 10px 0;
+      padding: .8rem 1.1rem;
+      font-size: 12.5px;
+      color: #92400e;
+      margin: .5rem 0 .5rem 43px;
+    }
+
+    /* Telegram box */
+    .tg-card {
+      background: #0f172a;
+      border-radius: 14px;
+      padding: 1.4rem 1.5rem;
+      margin-bottom: .85rem;
+      color: white;
+    }
+    .tg-card h3 { font-size: 14.5px; font-weight: 700; margin-bottom: .6rem; display: flex; align-items: center; gap: .5rem; }
+    .tg-card p, .tg-card li { font-size: 13px; color: #94a3b8; }
+    .tg-card ul { margin: .5rem 0 0 18px; }
+    .tg-card li { margin-bottom: 4px; }
+    .tg-bot { display: inline-block; background: #1d4ed8; color: white; border-radius: 6px; padding: 2px 10px; font-size: 13px; font-weight: 700; margin: .5rem 0; }
+    .tg-chat-id {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: .7rem 1rem;
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: .7rem;
+    }
+    .tg-chat-id strong { color: #f1f5f9; }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 2.5rem;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-logo">CB</div>
+    <div>
+      <h1>Guía de inicio — ContaBot</h1>
+      <p>Para que el contador configure su cuenta y empiece a usar el sistema</p>
+    </div>
+  </div>
+
+  <!-- URL -->
+  <div class="url-box">
+    <div class="url-label">Acceso</div>
+    <div class="url-value">https://contabot-demo-production.up.railway.app</div>
+  </div>
+
+  <!-- CÓDIGO DE ACCESO -->
+  <div class="code-banner">
+    <div class="code-banner-icon">🔑</div>
+    <div>
+      <div class="code-banner-label">Código de acceso para registro</div>
+      <div class="code-banner-value">ContaBot2026</div>
+      <div class="code-banner-note">Compártelo solo con contadores autorizados · No publicar</div>
+    </div>
+  </div>
+
+  <!-- PASO 1: REGISTRO -->
+  <div class="section-title">Paso 1 — Crear la cuenta</div>
+
+  <div class="step-card">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <h3>Abrir la URL en el navegador</h3>
+      <p>Entrar a <code>contabot-demo-production.up.railway.app</code> desde Chrome o cualquier navegador.</p>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <h3>Clic en "Crear cuenta"</h3>
+      <p>En la pantalla de inicio de sesión, hacer clic en la pestaña <strong>"Crear cuenta"</strong>.</p>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <h3>Llenar el formulario de registro</h3>
+      <ul>
+        <li><strong>Nombre completo:</strong> el nombre del contador</li>
+        <li><strong>Nombre del estudio:</strong> opcional (p. ej. "Asesorías Ramírez")</li>
+        <li><strong>T.P. y teléfono:</strong> opcionales</li>
+        <li><strong>Email:</strong> el correo del contador (será su usuario)</li>
+        <li><strong>Contraseña:</strong> mínimo 8 caracteres, inventar una propia</li>
+        <li><strong>Código de acceso:</strong> <code>ContaBot2026</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tip">✅ Una vez creada la cuenta, el contador queda dentro del sistema automáticamente.</div>
+
+  <!-- PASO 2: EMPRESA -->
+  <div class="section-title">Paso 2 — Agregar la primera empresa cliente</div>
+
+  <div class="step-card">
+    <div class="step-num purple">4</div>
+    <div class="step-body">
+      <h3>Ir a la sección "Empresas"</h3>
+      <p>Es la pantalla principal al entrar. Hacer clic en el botón <strong>"+ Nueva empresa"</strong> (esquina superior derecha).</p>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-num purple">5</div>
+    <div class="step-body">
+      <h3>Llenar los datos de la empresa</h3>
+      <ul>
+        <li><strong>NIT:</strong> sin dígito verificador (p. ej. <code>900456789</code>)</li>
+        <li><strong>Razón social:</strong> nombre de la empresa</li>
+        <li><strong>Régimen:</strong> Jurídica / Gran Contribuyente / Natural / Simple / responsable_iva</li>
+        <li><strong>Ciudad:</strong> para el cálculo de ICA</li>
+        <li><strong>Correo de contacto:</strong> opcional, para emails de cobro</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tip">Una empresa puede tener su Gmail conectado para recibir facturas automáticamente (siguiente paso).</div>
+
+  <!-- PASO 3: GMAIL -->
+  <div class="section-title">Paso 3 — Conectar Gmail por empresa (para recibir facturas automático)</div>
+
+  <div class="step-card">
+    <div class="step-num green">6</div>
+    <div class="step-body">
+      <h3>Entrar a la empresa → subtab "Gmail"</h3>
+      <p>Hacer clic en la empresa → abrir la pestaña <strong>"Gmail"</strong> dentro del dashboard de esa empresa.</p>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-num green">7</div>
+    <div class="step-body">
+      <h3>Solicitar al cliente el correo Gmail</h3>
+      <p>El cliente debe tener una cuenta Gmail donde llegan las facturas electrónicas de la DIAN. ContaBot solo funciona con Gmail (no Outlook, no correo corporativo).</p>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-num green">8</div>
+    <div class="step-body">
+      <h3>Clic en "Conectar Gmail" → autorizar</h3>
+      <p>Se abre la ventana de Google. Seleccionar la cuenta Gmail del cliente y hacer clic en <strong>"Permitir"</strong>. Desde ese momento, ContaBot empieza a monitorear ese correo automáticamente.</p>
+    </div>
+  </div>
+
+  <div class="warn">⚠️ El correo debe ser Gmail (@gmail.com o Google Workspace). El cliente debe autorizar el acceso desde su cuenta. El acceso tiene vigencia de 7 días y ContaBot notifica cuando está por vencer.</div>
+
+  <!-- TELEGRAM -->
+  <div class="section-title">Paso 4 — Configurar Telegram (notificaciones)</div>
+
+  <div class="tg-card">
+    <h3>🤖 Bot de Telegram</h3>
+    <p>ContaBot envía notificaciones al celular cada vez que llega una factura nueva, hay una empresa desconocida o se acerca una fecha tributaria.</p>
+    <br>
+    <p><strong>Para activarlo:</strong></p>
+    <ul>
+      <li>Abrir Telegram en el celular</li>
+      <li>Buscar el bot: <span class="tg-bot">@contabot_contador_bot</span></li>
+      <li>Hacer clic en <strong>"Iniciar"</strong> o escribir <code>/start</code></li>
+      <li>El bot responderá con un mensaje de bienvenida</li>
+    </ul>
+
+    <div class="tg-chat-id">
+      <strong>Para recibir las notificaciones en su celular</strong>, el contador debe enviarle al administrador del sistema su <em>Chat ID</em> de Telegram.<br><br>
+      Cómo obtenerlo: abrir <code>@userinfobot</code> en Telegram → enviar cualquier mensaje → el bot responde con el ID numérico.<br><br>
+      El administrador actualiza ese número en Railway → desde ahí el bot le llegará al contador.
+    </div>
+  </div>
+
+  <!-- RESUMEN -->
+  <div class="section-title">¿Cómo funciona el flujo una vez configurado?</div>
+
+  <div class="step-card">
+    <div class="step-num orange">✓</div>
+    <div class="step-body">
+      <h3>Flujo automático</h3>
+      <ul>
+        <li>Llega factura al Gmail del cliente → ContaBot la extrae → la guarda en la empresa correcta</li>
+        <li>Si el NIT no coincide con ninguna empresa → va a "Bandeja Pendiente" + notificación Telegram</li>
+        <li>El contador abre ContaBot → asigna la factura desde la Bandeja Pendiente</li>
+        <li>Al fin de período → ver Declaraciones → descargar Excel → presentar</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- CREDENCIALES RESUMEN -->
+  <div class="section-title">Resumen de accesos</div>
+
+  <div class="step-card">
+    <div class="step-num">📋</div>
+    <div class="step-body">
+      <h3>Datos para guardar</h3>
+      <ul>
+        <li><strong>URL sistema:</strong> <code>contabot-demo-production.up.railway.app</code></li>
+        <li><strong>Código de registro (confidencial):</strong> <code>ContaBot2026</code></li>
+        <li><strong>Bot Telegram:</strong> <code>@contabot_contador_bot</code></li>
+        <li><strong>Contraseña mínima:</strong> 8 caracteres (la elige el contador)</li>
+        <li><strong>Gmail requerido por empresa:</strong> cuenta Google del cliente</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer">
+    ContaBot · Automatización contable colombiana · Documento interno
+  </div>
+
+</div>
+</body>
+</html>

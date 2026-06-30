@@ -7,16 +7,26 @@ import urllib.request
 import json
 
 
-def _send(token: str, chat_id: str, texto: str):
-    payload = json.dumps({
-        "chat_id":    chat_id,
-        "text":       texto,
-        "parse_mode": "Markdown",
-    }).encode("utf-8")
+def _get_chat_id(sb=None, contador_id=None) -> str:
+    """Retorna el telegram_chat_id del contador; fallback a la variable de entorno global."""
+    if sb and contador_id:
+        try:
+            rows = sb.table("contadores").select("telegram_chat_id").eq("id", contador_id).execute().data
+            if rows and rows[0].get("telegram_chat_id"):
+                return rows[0]["telegram_chat_id"]
+        except Exception:
+            pass
+    return os.environ.get("TELEGRAM_CHAT_ID", "")
+
+
+def _send(token: str, chat_id: str, texto: str, reply_markup=None):
+    payload = {"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     try:
         req = urllib.request.Request(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            data=payload,
+            data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"}
         )
         urllib.request.urlopen(req, timeout=5)
@@ -24,13 +34,14 @@ def _send(token: str, chat_id: str, texto: str):
         print(f"Telegram: no se pudo enviar: {e}")
 
 
-def notificar_factura(datos: dict, empresa_nombre: str, tipo: str = "compra", fuente: str = ""):
+def notificar_factura(datos: dict, empresa_nombre: str, tipo: str = "compra",
+                      fuente: str = "", sb=None, contador_id=None):
     """
     tipo:   "compra" (factura recibida) o "venta" (factura emitida)
     fuente: "gmail", "upload", "manual"
     """
     token   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+    chat_id = _get_chat_id(sb, contador_id)
     if not token or not chat_id:
         return
 
@@ -61,13 +72,15 @@ def notificar_factura(datos: dict, empresa_nombre: str, tipo: str = "compra", fu
     _send(token, chat_id, texto)
 
 
-def notificar_empresa_desconocida(datos: dict, fuente: str = "gmail", pendiente_id: str = None, empresas: list = None):
+def notificar_empresa_desconocida(datos: dict, fuente: str = "gmail",
+                                   pendiente_id: str = None, empresas: list = None,
+                                   sb=None, contador_id=None):
     """
     Avisa cuando llega una factura con NIT receptor desconocido.
-    Muestra botones con todas las empresas registradas para que Eduardo seleccione a cuál pertenece.
+    Muestra botones con todas las empresas registradas para selección.
     """
     token   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+    chat_id = _get_chat_id(sb, contador_id)
     if not token or not chat_id:
         return
 
@@ -91,34 +104,18 @@ def notificar_empresa_desconocida(datos: dict, fuente: str = "gmail", pendiente_
         f"*¿A cuál de tus clientes pertenece?*"
     )
 
-    payload = {
-        "chat_id":    chat_id,
-        "text":       texto,
-        "parse_mode": "Markdown",
-    }
-
-    if pendiente_id:
+    reply_markup = None
+    if pendiente_id and empresas:
         teclado = []
-        # Un botón por empresa registrada
-        if empresas:
-            for e in empresas:
-                teclado.append([{
-                    "text": f"📌 {e['razon_social']}",
-                    "callback_data": f"asignar_empresa:{pendiente_id}:{e['id']}"
-                }])
-        # Botón ignorar al final
+        for e in empresas:
+            teclado.append([{
+                "text": f"📌 {e['razon_social']}",
+                "callback_data": f"asignar_empresa:{pendiente_id}:{e['id']}"
+            }])
         teclado.append([{
             "text": "❌ No es de ningún cliente, ignorar",
             "callback_data": f"ignorar_empresa:{pendiente_id}"
         }])
-        payload["reply_markup"] = json.dumps({"inline_keyboard": teclado})
+        reply_markup = json.dumps({"inline_keyboard": teclado})
 
-    try:
-        req = urllib.request.Request(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        urllib.request.urlopen(req, timeout=5)
-    except Exception as e:
-        print(f"Telegram: no se pudo enviar: {e}")
+    _send(token, chat_id, texto, reply_markup=reply_markup)

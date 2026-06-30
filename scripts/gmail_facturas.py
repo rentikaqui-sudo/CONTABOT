@@ -452,7 +452,7 @@ def procesar_mensaje(service, msg, empresa_id):
             datos["_email_origen"] = _gmail_cuenta  # cuenta Gmail donde llegó la factura
             pendiente_id = guardar_empresa_pendiente(datos, fuente="gmail", sb=_sb, contador_id=_contador_id)
             empresas_all = _sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
-            notificar_empresa_desconocida(datos, fuente="gmail", pendiente_id=pendiente_id, empresas=empresas_all)
+            notificar_empresa_desconocida(datos, fuente="gmail", pendiente_id=pendiente_id, empresas=empresas_all, sb=_sb, contador_id=_contador_id)
             if _PRIO["pendientes"] > _PRIO[mejor]:
                 mejor = "pendientes"
             continue  # seguir con otros adjuntos del mismo correo
@@ -462,7 +462,7 @@ def procesar_mensaje(service, msg, empresa_id):
             flujo = determinar_flujo(datos, empresa["nit"])
             guardar_remitente(remitente, datos.get("proveedor_nombre", ""), confianza)
             logging.info("[%s] Registrada: %s | %s → %s", flujo, datos.get("numero"), datos.get("proveedor_nombre", remitente), empresa["razon_social"])
-            notificar_factura(datos, empresa["razon_social"], tipo=flujo, fuente="gmail")
+            notificar_factura(datos, empresa["razon_social"], tipo=flujo, fuente="gmail", sb=_sb, contador_id=_contador_id)
         else:
             logging.info("Duplicada: %s", datos.get("numero"))
         if _PRIO.get(resultado, 0) > _PRIO[mejor]:

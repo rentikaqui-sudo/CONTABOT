@@ -4,7 +4,7 @@ Cada contador se registra con email/password y solo ve sus propias empresas.
 Data layer: Supabase (service_role key)
 """
 
-import os, json, functools, re, sys, logging, time
+import os, json, functools, re, sys, logging, time, secrets
 from datetime import date, timedelta, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
@@ -37,6 +37,17 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 
 sb: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+def _migrate_contadores():
+    """Agrega columnas telegram si no existen (idempotente)."""
+    try:
+        sb.table("contadores").update({"telegram_chat_id": None, "telegram_token": None}).eq("id", 0).execute()
+    except Exception:
+        pass  # Columnas no existen — requieren migración manual en Supabase SQL Editor
+
+
+_migrate_contadores()
 
 app = Flask(__name__, static_folder=UI_DIR)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
@@ -2617,7 +2628,7 @@ def subir_factura():
     if not empresa_id:
         pendiente_id = guardar_empresa_pendiente(datos, fuente="upload", sb=sb, contador_id=cid)
         empresas_all = sb.table("empresas_clientes").select("id,nit,razon_social").eq("contador_id", cid).execute().data
-        notificar_empresa_desconocida(datos, fuente="upload", pendiente_id=pendiente_id, empresas=empresas_all)
+        notificar_empresa_desconocida(datos, fuente="upload", pendiente_id=pendiente_id, empresas=empresas_all, sb=sb, contador_id=cid)
         return jsonify({
             "ok": True,
             "datos": datos,
@@ -2653,7 +2664,7 @@ def subir_factura():
     # Guardar en la tabla correcta según rol de la empresa (venta o gasto)
     flujo, _ = guardar_factura(datos, empresa_id, empresa["nit"],
                                storage_url or str(destino), "upload", sb)
-    notificar_factura(datos, empresa_nombre, tipo=flujo, fuente="upload")
+    notificar_factura(datos, empresa_nombre, tipo=flujo, fuente="upload", sb=sb, contador_id=cid)
 
     return jsonify({
         "ok": True,
@@ -2688,9 +2699,39 @@ def confirmar_factura():
     flujo, resultado = guardar_factura(datos, int(empresa_id), empresa_nit, "", "upload", sb)
     if resultado == "duplicada":
         return jsonify({"ok": True, "duplicada": True, "mensaje": f"La factura {datos.get('numero','')} ya estaba registrada."})
-    notificar_factura(datos, empresa_nombre, tipo=flujo, fuente="upload")
+    notificar_factura(datos, empresa_nombre, tipo=flujo, fuente="upload", sb=sb, contador_id=session["contador_id"])
     return jsonify({"ok": True, "duplicada": False, "empresa": empresa_nombre,
                     "mensaje": f"Factura {datos.get('numero','')} registrada en {empresa_nombre} como {flujo}."})
+
+
+# ── Telegram — vinculación por contador ──────────────────────────────────────
+
+@app.route("/api/telegram/status")
+@login_required
+def telegram_status():
+    cid = session["contador_id"]
+    row = sb.table("contadores").select("telegram_chat_id").eq("id", cid).execute().data
+    connected = bool(row and row[0].get("telegram_chat_id"))
+    return jsonify({"connected": connected})
+
+
+@app.route("/api/telegram/generar-link", methods=["POST"])
+@login_required
+def telegram_generar_link():
+    cid   = session["contador_id"]
+    token = secrets.token_urlsafe(16)
+    sb.table("contadores").update({"telegram_token": token}).eq("id", cid).execute()
+    bot_username = "contabot_contador_bot"
+    link = f"https://t.me/{bot_username}?start={token}"
+    return jsonify({"ok": True, "link": link})
+
+
+@app.route("/api/telegram/desconectar", methods=["POST"])
+@login_required
+def telegram_desconectar():
+    cid = session["contador_id"]
+    sb.table("contadores").update({"telegram_chat_id": None, "telegram_token": None}).eq("id", cid).execute()
+    return jsonify({"ok": True})
 
 
 # ── Telegram Webhook ─────────────────────────────────────────────────────────
@@ -2705,6 +2746,37 @@ def telegram_webhook():
     if received != tg_secret:
         return "", 403
     update = request.get_json(silent=True) or {}
+    token_bot = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+
+    # Manejar mensajes de texto — vinculación via /start TOKEN
+    if "message" in update:
+        msg          = update["message"]
+        text         = msg.get("text", "")
+        from_chat_id = str(msg["chat"]["id"])
+        if text.startswith("/start"):
+            parts      = text.split(None, 1)
+            link_token = parts[1].strip() if len(parts) > 1 else ""
+            from telegram_notif import _send as _tg_send
+            if link_token:
+                rows = sb.table("contadores").select("id,nombre").eq("telegram_token", link_token).execute().data
+                if rows:
+                    c = rows[0]
+                    sb.table("contadores").update({
+                        "telegram_chat_id": from_chat_id,
+                        "telegram_token":   None,
+                    }).eq("id", c["id"]).execute()
+                    _tg_send(token_bot, from_chat_id,
+                        f"✅ ¡Hola {c['nombre']}! Tu cuenta ContaBot quedó vinculada.\n\n"
+                        "🔔 Desde ahora recibirás aquí:\n"
+                        "• Facturas nuevas (correo automático y subidas manuales)\n"
+                        "• Avisos de empresa desconocida con selector de cliente\n"
+                        "• Alertas cuando el acceso Gmail esté por vencer\n"
+                        "• Recordatorios de obligaciones tributarias próximas")
+                else:
+                    _tg_send(token_bot, from_chat_id,
+                        "⚠️ Enlace inválido o ya utilizado.\n"
+                        "Genera un nuevo enlace desde ContaBot → Conectar Telegram.")
+        return jsonify({"ok": True})
 
     if "callback_query" not in update:
         return jsonify({"ok": True})
