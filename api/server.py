@@ -2385,14 +2385,29 @@ def auth_gmail_callback():
         "token_created_at": datetime.now(timezone.utc).isoformat(),
         "activo": True,
     }, on_conflict="empresa_id").execute()
-    empresa = sb.table("empresas_clientes").select("razon_social").eq("id", empresa_id).execute().data
-    nombre = empresa[0]["razon_social"] if empresa else f"Empresa {empresa_id}"
-    return f"""<html><body style="font-family:sans-serif;text-align:center;padding:60px">
-    <h2>✅ Gmail conectado</h2>
-    <p><b>{email}</b> autorizado para <b>{nombre}</b></p>
-    <p>El bot leerá este correo cada 2 horas para detectar facturas DIAN.</p>
-    <a href="/" style="background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none">
-    Volver al dashboard</a></body></html>"""
+    empresa = sb.table("empresas_clientes").select("razon_social,contador_id").eq("id", empresa_id).execute().data
+    nombre      = empresa[0]["razon_social"] if empresa else f"Empresa {empresa_id}"
+    contador_id = empresa[0].get("contador_id") if empresa else None
+    # Notificar al contador por Telegram
+    chat_id = _tg_chat_id_for_contador(contador_id)
+    _tg_send_raw(chat_id,
+        f"✅ *Gmail renovado correctamente*\n\n"
+        f"🏢 Empresa: *{nombre}*\n"
+        f"📧 Correo: {email}\n\n"
+        f"El acceso quedó activo por 7 días más.\n"
+        f"ContaBot seguirá leyendo las facturas automáticamente."
+    )
+    return f"""<html><body style="font-family:sans-serif;text-align:center;padding:60px;background:#f8fafc">
+    <div style="max-width:440px;margin:0 auto;background:white;border-radius:16px;padding:2.5rem;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+    <div style="font-size:48px;margin-bottom:1rem">✅</div>
+    <h2 style="color:#1e293b;margin-bottom:.5rem">Gmail renovado</h2>
+    <p style="color:#475569;margin-bottom:.25rem"><b style="color:#1e293b">{email}</b></p>
+    <p style="color:#475569;margin-bottom:1.5rem">conectado a <b style="color:#1e293b">{nombre}</b></p>
+    <p style="background:#f0fdf4;border-radius:8px;padding:.75rem;color:#065f46;font-size:14px;margin-bottom:1.5rem">
+    🔔 Se envió confirmación a tu Telegram</p>
+    <a href="/" style="background:#2563eb;color:white;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">
+    Volver al dashboard →</a>
+    </div></body></html>"""
 
 @app.route("/api/gmail/tokens", methods=["GET"])
 @login_required
