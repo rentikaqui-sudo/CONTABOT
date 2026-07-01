@@ -35,10 +35,11 @@ def _send(token: str, chat_id: str, texto: str, reply_markup=None):
 
 
 def notificar_factura(datos: dict, empresa_nombre: str, tipo: str = "compra",
-                      fuente: str = "", sb=None, contador_id=None):
+                      fuente: str = "", cuenta_gmail: str = "", sb=None, contador_id=None):
     """
-    tipo:   "compra" (factura recibida) o "venta" (factura emitida)
-    fuente: "gmail", "upload", "manual"
+    tipo:         "compra" (factura recibida) o "venta" (factura emitida)
+    fuente:       "gmail", "upload", "manual"
+    cuenta_gmail: correo Gmail de la empresa donde llegó (para mostrar en notificación)
     """
     token   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat_id = _get_chat_id(sb, contador_id)
@@ -47,11 +48,15 @@ def notificar_factura(datos: dict, empresa_nombre: str, tipo: str = "compra",
 
     icono = "📥" if tipo == "compra" else "📤"
     tipo_label = "Factura de compra" if tipo == "compra" else "Factura de venta"
-    fuente_label = {
-        "gmail":  "📧 Correo automático",
-        "upload": "⬆️ Subida manual",
-        "manual": "✏️ Ingreso manual",
-    }.get(fuente, "ContaBot")
+
+    if fuente == "gmail" and cuenta_gmail:
+        fuente_label = f"📧 {cuenta_gmail}"
+    elif fuente == "gmail":
+        fuente_label = "📧 Correo automático"
+    elif fuente == "upload":
+        fuente_label = "⬆️ Subida manual"
+    else:
+        fuente_label = "✏️ Ingreso manual"
 
     contraparte = datos.get("proveedor_nombre") or datos.get("cliente_nombre") or "Desconocido"
     nit_cp = datos.get("proveedor_nit") or datos.get("cliente_nit") or ""

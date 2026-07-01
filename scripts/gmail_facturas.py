@@ -535,7 +535,7 @@ def procesar_mensaje(service, msg, empresa_id):
             flujo = determinar_flujo(datos, empresa["nit"])
             guardar_remitente(remitente, datos.get("proveedor_nombre", ""), confianza)
             logging.info("[%s] Registrada: %s | %s → %s", flujo, datos.get("numero"), datos.get("proveedor_nombre", remitente), empresa["razon_social"])
-            notificar_factura(datos, empresa["razon_social"], tipo=flujo, fuente="gmail", sb=_sb, contador_id=_contador_id)
+            notificar_factura(datos, empresa["razon_social"], tipo=flujo, fuente="gmail", cuenta_gmail=_gmail_cuenta, sb=_sb, contador_id=_contador_id)
         else:
             logging.info("Duplicada: %s", datos.get("numero"))
         if _PRIO.get(resultado, 0) > _PRIO[mejor]:
