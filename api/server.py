@@ -2790,9 +2790,64 @@ def telegram_desconectar():
 
 # ── Telegram Webhook ─────────────────────────────────────────────────────────
 
+def _procesar_respuesta_empresa(chat_id: str, texto: str, token_bot: str):
+    """
+    Procesa la respuesta del usuario al teclado de asignación de empresa.
+    Busca la factura pendiente más antigua para este contador, la asigna,
+    y si hay más pendientes envía automáticamente el siguiente teclado.
+    """
+    contador_rows = sb.table("contadores").select("id").eq("telegram_chat_id", chat_id).execute().data
+    if not contador_rows:
+        return
+    cid = contador_rows[0]["id"]
+
+    pendientes = sb.table("empresas_pendientes").select("*").eq("contador_id", cid) \
+        .order("created_at").limit(1).execute().data
+    if not pendientes:
+        return  # No hay nada pendiente — el usuario escribió algo random
+
+    p       = pendientes[0]
+    datos   = p.get("factura_data") or {}
+    fuente  = p.get("fuente") or "gmail"
+    num     = datos.get("numero", "—")
+
+    if texto == "❌ No es de ningún cliente, ignorar":
+        sb.table("empresas_pendientes").delete().eq("id", p["id"]).execute()
+        _tg_send_raw(chat_id, f"🗑️ Factura N° {num} ignorada y eliminada de la bandeja.")
+    else:
+        emp = sb.table("empresas_clientes").select("id,razon_social,nit") \
+            .eq("razon_social", texto).eq("contador_id", cid).execute().data
+        if not emp:
+            _tg_send_raw(chat_id, f"⚠️ No reconocí *{texto}* como cliente. Elige una opción del teclado.")
+            return
+        e = emp[0]
+        flujo, _ = guardar_factura(datos, e["id"], e["nit"], "", fuente, sb)
+        sb.table("empresas_pendientes").delete().eq("id", p["id"]).execute()
+        tipo_label = "venta" if flujo == "venta" else "gasto"
+        _tg_send_raw(chat_id,
+            f"✅ *Factura asignada*\n\n"
+            f"📌 Cliente: *{e['razon_social']}*\n"
+            f"📄 Factura N° {num} — registrada como *{tipo_label}*"
+        )
+
+    # Siguiente en la cola
+    resto = sb.table("empresas_pendientes").select("*").eq("contador_id", cid) \
+        .order("created_at").limit(1).execute().data
+    if resto:
+        np = resto[0]
+        ndatos  = np.get("factura_data") or {}
+        nfuente = np.get("fuente") or "gmail"
+        empresas_all = sb.table("empresas_clientes").select("razon_social") \
+            .eq("contador_id", cid).execute().data
+        from telegram_notif import _enviar_pregunta_empresa
+        _enviar_pregunta_empresa(token_bot, chat_id, ndatos, nfuente, empresas_all)
+    else:
+        _tg_send_raw(chat_id, "✅ ¡Listo! No hay más facturas pendientes de asignar.")
+
+
 @app.route("/api/telegram/webhook", methods=["POST"])
 def telegram_webhook():
-    """Recibe callbacks de Telegram (botones inline) y procesa confirmaciones de empresa."""
+    """Recibe callbacks de Telegram y procesa confirmaciones de empresa vía reply_keyboard."""
     tg_secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
     if not tg_secret:
         return "", 403
@@ -2858,6 +2913,10 @@ def telegram_webhook():
                     _tg_send(token_bot, from_chat_id,
                         f"⚠️ No encontré ninguna cuenta con el email `{email}`.\n"
                         "Verifica que sea el mismo email con el que te registraste en ContaBot.")
+
+        # Respuesta del teclado de opciones (reply_keyboard) para asignar empresa
+        elif text and not text.startswith("/"):
+            _procesar_respuesta_empresa(from_chat_id, text, token_bot)
 
         return jsonify({"ok": True})
 

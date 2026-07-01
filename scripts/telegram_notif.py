@@ -77,45 +77,56 @@ def notificar_empresa_desconocida(datos: dict, fuente: str = "gmail",
                                    sb=None, contador_id=None):
     """
     Avisa cuando llega una factura con NIT receptor desconocido.
-    Muestra botones con todas las empresas registradas para selección.
+    Usa reply_keyboard (teclado nativo) para selección — más confiable que inline buttons.
+    Lógica de cola: solo envía el teclado si no hay otra factura pendiente esperando
+    respuesta del usuario. Las demás quedan en DB y se preguntan automáticamente
+    después de que el usuario responda la anterior.
     """
     token   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat_id = _get_chat_id(sb, contador_id)
     if not token or not chat_id:
         return
 
-    nit    = datos.get("receptor_nit") or "desconocido"
-    nombre = datos.get("receptor_nombre") or ""
-    prov   = datos.get("proveedor_nombre", "")
-    num    = datos.get("numero", "—")
+    # Cola: contar cuántas pendientes hay para este contador en Supabase.
+    # Si hay más de 1 (esta + otras anteriores), no enviar teclado — ya hay una en curso.
+    if sb and contador_id and pendiente_id:
+        try:
+            total_pendientes = sb.table("empresas_pendientes").select("id", count="exact") \
+                .eq("contador_id", contador_id).execute().count
+            if total_pendientes is not None and total_pendientes > 1:
+                return  # Hay otra pregunta activa; esta se enviará después
+        except Exception:
+            pass
+
+    _enviar_pregunta_empresa(token, chat_id, datos, fuente, empresas)
+
+
+def _enviar_pregunta_empresa(token: str, chat_id: str, datos: dict,
+                              fuente: str = "gmail", empresas: list = None):
+    """Envía el mensaje con reply_keyboard para asignar empresa a una factura pendiente."""
+    nit   = datos.get("receptor_nit") or "desconocido"
+    prov  = datos.get("proveedor_nombre") or datos.get("cliente_nombre") or "proveedor desconocido"
+    num   = datos.get("numero", "—")
     fuente_label = {"gmail": "📧 correo", "upload": "⬆️ subida"}.get(fuente, fuente)
 
     def fmt(v):
         try: return f"${int(v or 0):,}".replace(",", ".")
         except: return "$0"
 
-    total = fmt(datos.get("total_factura"))
-
     texto = (
         f"⚠️ *No reconocí el receptor de esta factura*\n\n"
-        f"📄 Factura N° {num} de *{prov or 'proveedor desconocido'}* — {total}\n"
+        f"📄 Factura N° {num} de *{prov}* — {fmt(datos.get('total_factura'))}\n"
         f"🔢 NIT/CC en factura: `{nit}`\n"
         f"Via: {fuente_label}\n\n"
         f"*¿A cuál de tus clientes pertenece?*"
     )
 
-    reply_markup = None
-    if pendiente_id and empresas:
-        teclado = []
-        for e in empresas:
-            teclado.append([{
-                "text": f"📌 {e['razon_social']}",
-                "callback_data": f"asignar_empresa:{pendiente_id}:{e['id']}"
-            }])
-        teclado.append([{
-            "text": "❌ No es de ningún cliente, ignorar",
-            "callback_data": f"ignorar_empresa:{pendiente_id}"
-        }])
-        reply_markup = json.dumps({"inline_keyboard": teclado})
+    opciones = [e["razon_social"] for e in (empresas or [])]
+    opciones.append("❌ No es de ningún cliente, ignorar")
 
+    reply_markup = json.dumps({
+        "keyboard": [[{"text": op}] for op in opciones],
+        "one_time_keyboard": True,
+        "resize_keyboard": True,
+    })
     _send(token, chat_id, texto, reply_markup=reply_markup)
