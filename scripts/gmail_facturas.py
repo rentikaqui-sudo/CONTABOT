@@ -79,6 +79,27 @@ PATRON_CUFE = re.compile(r"\b([a-f0-9]{96})\b", re.IGNORECASE)
 UBL_NS = "urn:oasis:names:specification:ubl:schema:xsd"
 
 
+# ── NIT receptor genérico / placeholder ──────────────────────────────────────
+
+def _es_nit_generico(nit: str) -> bool:
+    """
+    Detecta NITs placeholder que no identifican a una empresa real:
+    - Todos los dígitos iguales: 2222222222222, 9999999999, etc.
+    - Más de 12 dígitos (NIT colombiano máx 10 + dígito verificador)
+    - Vacío o solo ceros
+    """
+    if not nit:
+        return True
+    digits = re.sub(r"[^\d]", "", nit)
+    if not digits or all(d == "0" for d in digits):
+        return True
+    if len(set(digits)) == 1:   # todos iguales: 2222..., 9999..., etc.
+        return True
+    if len(digits) > 12:
+        return True
+    return False
+
+
 # ── Aprendizaje de remitentes ─────────────────────────────────────────────────
 
 def cargar_remitentes():
@@ -486,16 +507,28 @@ def procesar_mensaje(service, msg, empresa_id):
             continue
         datos = _enriquecer_datos(datos, info)
 
-        empresa = detectar_o_crear_empresa(datos, _sb)
+        empresa = detectar_o_crear_empresa(datos, _sb, contador_id=_contador_id)
         if not empresa:
-            logging.warning("Empresa no encontrada (NIT %s) — avisando por Telegram", datos.get("receptor_nit", "?"))
-            datos["_email_origen"] = _gmail_cuenta  # cuenta Gmail donde llegó la factura
-            pendiente_id = guardar_empresa_pendiente(datos, fuente="gmail", sb=_sb, contador_id=_contador_id)
-            empresas_all = _sb.table("empresas_clientes").select("id,nit,razon_social").execute().data
-            notificar_empresa_desconocida(datos, fuente="gmail", pendiente_id=pendiente_id, empresas=empresas_all, sb=_sb, contador_id=_contador_id)
-            if _PRIO["pendientes"] > _PRIO[mejor]:
-                mejor = "pendientes"
-            continue  # seguir con otros adjuntos del mismo correo
+            receptor_nit = datos.get("receptor_nit", "")
+            # Opción B: NIT genérico/placeholder + sabemos la empresa por el correo Gmail
+            if empresa_id and _es_nit_generico(receptor_nit):
+                emp_row = _sb.table("empresas_clientes").select("id,nit,razon_social,contador_id") \
+                    .eq("id", empresa_id).execute().data
+                if emp_row:
+                    empresa = emp_row[0]
+                    logging.info("[gmail] NIT genérico '%s' — asignando por correo Gmail a %s",
+                                 receptor_nit, empresa["razon_social"])
+            if not empresa:
+                logging.warning("Empresa no encontrada (NIT %s) — avisando por Telegram", receptor_nit or "?")
+                datos["_email_origen"] = _gmail_cuenta
+                pendiente_id = guardar_empresa_pendiente(datos, fuente="gmail", sb=_sb, contador_id=_contador_id)
+                empresas_all = _sb.table("empresas_clientes").select("id,nit,razon_social") \
+                    .eq("contador_id", _contador_id).execute().data
+                notificar_empresa_desconocida(datos, fuente="gmail", pendiente_id=pendiente_id,
+                                              empresas=empresas_all, sb=_sb, contador_id=_contador_id)
+                if _PRIO["pendientes"] > _PRIO[mejor]:
+                    mejor = "pendientes"
+                continue
 
         resultado = registrar_en_db(datos, empresa["id"], empresa["nit"], str(file_usado))
         if resultado == "nuevas" and remitente:
