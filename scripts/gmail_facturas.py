@@ -172,6 +172,37 @@ def get_gmail():
 
 # ── Detección inteligente de facturas ────────────────────────────────────────
 
+_KEYWORDS_ASUNTO = ("factura electr", "factura de venta", "dian", "fe-", "fev-", "factura", "invoice")
+
+def _candidata_por_metadata(service, mid: str) -> tuple:
+    """
+    Fetch barato (solo headers). Retorna (es_candidata, asunto, remitente).
+    Descarta correos que claramente no son facturas antes de descargar el cuerpo completo.
+    """
+    try:
+        meta = service.users().messages().get(
+            userId="me", id=mid, format="metadata",
+            metadataHeaders=["Subject", "From"]
+        ).execute()
+    except Exception:
+        return True, "", ""  # ante duda, procesar
+    headers   = {h["name"]: h["value"] for h in meta.get("payload", {}).get("headers", [])}
+    asunto    = headers.get("Subject", "")
+    from_raw  = headers.get("From", "")
+    remitente_m = re.search(r"[\w\.\-]+@[\w\.\-]+", from_raw)
+    remitente = remitente_m.group(0).lower() if remitente_m else ""
+
+    if PATRON_ASUNTO_DIAN.search(asunto):
+        return True, asunto, remitente
+    asunto_lower = asunto.lower()
+    if any(kw in asunto_lower for kw in _KEYWORDS_ASUNTO):
+        return True, asunto, remitente
+    remitentes_conocidos = cargar_remitentes()
+    if remitente in remitentes_conocidos:
+        return True, asunto, remitente
+    return False, asunto, remitente
+
+
 def puntaje_es_factura(asunto, nombre_adjunto, remitente):
     """
     Retorna (es_factura: bool, confianza: int, info: dict)
@@ -295,6 +326,10 @@ def escanear_desde_history(service, empresa_id: int, email: str, history_id: str
         logging.info("[push] %s: %d mensajes nuevos", email, len(msg_ids))
         service_obj = service
         for mid in msg_ids:
+            candidata, asunto_pre, _ = _candidata_por_metadata(service_obj, mid)
+            if not candidata:
+                logging.debug("[push] descartado por metadata: %s", asunto_pre[:60])
+                continue
             msg = service_obj.users().messages().get(userId="me", id=mid, format="full").execute()
             procesar_mensaje(service_obj, msg, empresa_id)
     except Exception as e:
@@ -354,6 +389,11 @@ def escanear_inbox(empresa_id, max_correos=100, service=None):
     stats = {"nuevas": 0, "duplicadas": 0, "ignoradas": 0, "errores": 0}
 
     for ref in mensajes:
+        candidata, asunto_pre, _ = _candidata_por_metadata(service, ref["id"])
+        if not candidata:
+            logging.debug("[inbox] descartado por metadata: %s", asunto_pre[:60])
+            stats["ignoradas"] += 1
+            continue
         msg = service.users().messages().get(
             userId="me", id=ref["id"], format="full"
         ).execute()

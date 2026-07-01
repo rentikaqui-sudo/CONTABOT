@@ -2385,6 +2385,15 @@ def auth_gmail_callback():
         "token_created_at": datetime.now(timezone.utc).isoformat(),
         "activo": True,
     }, on_conflict="empresa_id").execute()
+    # Activar Push Notifications (Pub/Sub watch) para esta cuenta
+    try:
+        from gmail_facturas import get_gmail_from_supabase, registrar_watch
+        service_w, _ = get_gmail_from_supabase(int(empresa_id))
+        if service_w:
+            registrar_watch(service_w, int(empresa_id))
+            logging.info("[gmail] Watch Pub/Sub registrado para empresa %s (%s)", empresa_id, email)
+    except Exception:
+        logging.exception("[gmail] No se pudo registrar watch para empresa %s", empresa_id)
     empresa = sb.table("empresas_clientes").select("razon_social,contador_id").eq("id", empresa_id).execute().data
     nombre      = empresa[0]["razon_social"] if empresa else f"Empresa {empresa_id}"
     contador_id = empresa[0].get("contador_id") if empresa else None
