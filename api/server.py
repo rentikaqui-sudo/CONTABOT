@@ -206,6 +206,14 @@ def security_headers(response):
 
 # ── Páginas ──────────────────────────────────────────────────────────────────
 
+@app.route("/health")
+def health():
+    try:
+        supabase.table("contadores").select("id").limit(1).execute()
+        return jsonify({"status": "ok", "db": "ok"})
+    except Exception:
+        return jsonify({"status": "ok", "db": "unreachable"}), 200
+
 @app.route("/")
 def index():
     if not session.get("contador_id"):
