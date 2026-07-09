@@ -2526,15 +2526,22 @@ def escanear_gmail_empresa(eid):
     except RefreshError:
         logging.warning("Token Gmail revocado para empresa %s", eid)
         try:
-            sb.table("gmail_tokens").update({"activo": False}).eq("empresa_id", eid).execute()
-            empresa = sb.table("empresas_clientes").select("razon_social").eq("id", eid).execute().data
+            token_row = sb.table("gmail_tokens").update({"activo": False}).eq("empresa_id", eid).execute()
+            email_gmail = ""
+            token_data = sb.table("gmail_tokens").select("email").eq("empresa_id", eid).execute().data
+            if token_data:
+                email_gmail = token_data[0].get("email", "")
+            empresa = sb.table("empresas_clientes").select("razon_social,nit").eq("id", eid).execute().data
             nombre = empresa[0]["razon_social"] if empresa else f"empresa #{eid}"
+            nit = empresa[0].get("nit", "") if empresa else ""
             cid = session.get("contador_id")
             chat_id = _tg_chat_id_for_contador(cid)
             _tg_send_raw(chat_id,
                 f"⚠️ *Token Gmail vencido*\n\n"
-                f"El acceso a Gmail de *{nombre}* expiró y debe renovarse.\n\n"
-                f"Entra a ContaBot → {nombre} → tab Gmail → *Reconectar Gmail*"
+                f"*Empresa:* {nombre}\n"
+                f"*NIT:* {nit}\n"
+                f"*Gmail:* {email_gmail}\n\n"
+                f"Entra a ContaBot → selecciona *{nombre}* → tab *Gmail* → botón *Reconectar Gmail*"
             )
         except Exception:
             logging.exception("Error al manejar token revocado empresa %s", eid)
