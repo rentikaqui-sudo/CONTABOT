@@ -1948,22 +1948,19 @@ async function loadGmailEmpresa(eid) {
         '</div>' +
         (!conectado ? '<a href="/auth/gmail?empresa_id=' + eid + '" class="btn-demo" style="display:inline-block;margin-bottom:1.25rem">Conectar Gmail</a>' : '') +
         (conectado ?
-          '<div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">' +
-            '<button class="btn-demo" id="btn-scan-gmail" onclick="escanearGmail(' + eid + ')">Escanear bandeja ahora</button>' +
+          '<div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem;align-items:flex-end">' +
+            '<div>' +
+              '<div style="font-size:12px;color:var(--muted);margin-bottom:.3rem">Desde (opcional)</div>' +
+              '<input type="date" id="gmail-desde-fecha" style="padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:13px" />' +
+            '</div>' +
+            '<div>' +
+              '<div style="font-size:12px;color:var(--muted);margin-bottom:.3rem">Máx correos</div>' +
+              '<input type="number" id="gmail-max-correos" value="50" min="10" max="2000" style="width:80px;padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:13px" />' +
+            '</div>' +
+            '<button class="btn-demo" id="btn-scan-gmail" onclick="escanearGmail(' + eid + ')">Escanear bandeja</button>' +
             '<a href="/auth/gmail?empresa_id=' + eid + '" class="btn-demo" style="background:#f59e0b;color:#fff;display:inline-block">Reconectar Gmail</a>' +
             '<button class="btn-demo" style="background:#6b7280;color:#fff" onclick="desconectarGmail(' + eid + ')">Desconectar</button>' +
             '<button class="btn-demo" style="background:var(--red);color:#fff" onclick="limpiarFacturasEmpresa(' + eid + ')">Limpiar facturas (testing)</button>' +
-          '</div>' +
-          '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;margin-bottom:1.25rem;max-width:480px">' +
-            '<div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:.75rem">ESCANEO HISTÓRICO</div>' +
-            '<div style="font-size:13px;color:#64748b;margin-bottom:.75rem">Marca correos como no leídos en Gmail y escaneará desde esa fecha. Útil para importar facturas pasadas.</div>' +
-            '<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">' +
-              '<label style="font-size:13px;color:#374151">Desde:</label>' +
-              '<input type="date" id="gmail-desde-fecha" style="padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:13px" />' +
-              '<input type="number" id="gmail-max-correos" value="500" min="50" max="2000" style="width:80px;padding:.35rem .6rem;border:1px solid #d1d5db;border-radius:6px;font-size:13px" />' +
-              '<span style="font-size:12px;color:var(--muted)">máx correos</span>' +
-              '<button class="btn-demo" id="btn-scan-historico" onclick="escanearGmailHistorico(' + eid + ')" style="background:#7c3aed;color:#fff">Escanear histórico</button>' +
-            '</div>' +
           '</div>' +
           '<div id="gmail-scan-resultado"></div>'
         : '') +
@@ -1976,14 +1973,16 @@ async function loadGmailEmpresa(eid) {
 async function escanearGmail(eid) {
   const btn = document.getElementById('btn-scan-gmail');
   const res_div = document.getElementById('gmail-scan-resultado');
+  const afterDate = (document.getElementById('gmail-desde-fecha')?.value || '').replace(/-/g, '/') || null;
+  const maxCorreos = parseInt(document.getElementById('gmail-max-correos')?.value) || 50;
   btn.disabled = true;
   btn.textContent = 'Escaneando...';
-  res_div.innerHTML = '<p style="color:var(--muted)">Buscando facturas en el inbox...</p>';
+  res_div.innerHTML = '<p style="color:var(--muted)">Buscando facturas' + (afterDate ? ' desde ' + afterDate : '') + '...</p>';
   try {
     const res = await fetch('/api/empresa/' + eid + '/gmail/escanear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ max_correos: 50 }),
+      body: JSON.stringify({ max_correos: maxCorreos, after_date: afterDate }),
     });
     const data = await res.json();
     if (data.ok) {
@@ -1998,7 +1997,7 @@ async function escanearGmail(eid) {
           '</div>' +
         '</div>';
       if ((data.nuevas ?? 0) > 0) {
-        showToast(data.nuevas + ' factura(s) nueva(s) registradas', 'success');
+        showToast(data.nuevas + ' factura(s) registradas', 'success');
         ventasEmpresaData = {};
         gastosEmpresaData = {};
       } else {
@@ -2009,57 +2008,10 @@ async function escanearGmail(eid) {
       if (res.status === 401) loadGmailEmpresa(eid);
     }
   } catch(e) {
-    res_div.innerHTML = '<p style="color:var(--red)">Error al escanear</p>';
+    res_div.innerHTML = '<p style="color:var(--red)">Error al escanear. Si pusiste muchos correos puede haber hecho timeout — intenta en lotes.</p>';
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Escanear bandeja ahora';
-  }
-}
-
-async function escanearGmailHistorico(eid) {
-  const fechaInput = document.getElementById('gmail-desde-fecha');
-  const maxInput = document.getElementById('gmail-max-correos');
-  const btn = document.getElementById('btn-scan-historico');
-  const res_div = document.getElementById('gmail-scan-resultado');
-  const afterDate = fechaInput.value ? fechaInput.value.replaceAll('-', '/') : null;
-  const maxCorreos = parseInt(maxInput.value) || 500;
-  btn.disabled = true;
-  btn.textContent = 'Escaneando...';
-  res_div.innerHTML = '<p style="color:var(--muted)">Escaneando correos históricos' + (afterDate ? ' desde ' + afterDate : '') + '... Esto puede tardar varios minutos si hay muchos correos.</p>';
-  try {
-    const res = await fetch('/api/empresa/' + eid + '/gmail/escanear', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ max_correos: maxCorreos, after_date: afterDate }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      res_div.innerHTML =
-        '<div class="kpi-card green" style="max-width:400px">' +
-          '<div class="kpi-label">Resultado del escaneo histórico</div>' +
-          '<div style="margin-top:.5rem;display:grid;grid-template-columns:1fr 1fr;gap:.5rem">' +
-            '<div><b style="color:var(--green)">' + (data.nuevas ?? 0) + '</b> <span class="muted">nuevas</span></div>' +
-            '<div><b style="color:var(--muted)">' + (data.duplicadas ?? 0) + '</b> <span class="muted">duplicadas</span></div>' +
-            '<div><b style="color:var(--yellow)">' + (data.ignoradas ?? 0) + '</b> <span class="muted">ignoradas</span></div>' +
-            '<div><b style="color:var(--red)">' + (data.errores ?? 0) + '</b> <span class="muted">errores</span></div>' +
-          '</div>' +
-        '</div>';
-      if ((data.nuevas ?? 0) > 0) {
-        showToast(data.nuevas + ' factura(s) importadas del histórico', 'success');
-        ventasEmpresaData = {};
-        gastosEmpresaData = {};
-      } else {
-        showToast('Escaneo completado — sin facturas nuevas', 'info');
-      }
-    } else {
-      res_div.innerHTML = '<p style="color:var(--red)">' + esc(data.error) + '</p>';
-      if (res.status === 401) loadGmailEmpresa(eid);
-    }
-  } catch(e) {
-    res_div.innerHTML = '<p style="color:var(--red)">Error al escanear. Si hay muchos correos puede haber hecho timeout — intenta con menos correos o en lotes.</p>';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Escanear histórico';
+    btn.textContent = 'Escanear bandeja';
   }
 }
 
