@@ -2516,12 +2516,29 @@ def escanear_gmail_empresa(eid):
     max_correos = min(int(body.get("max_correos", 50)), 200)
     try:
         from gmail_facturas import get_gmail_from_supabase, escanear_inbox
+        from google.auth.exceptions import RefreshError
         service, _ = get_gmail_from_supabase(eid)
         if not service:
             return jsonify({"ok": False, "error": "Esta empresa no tiene Gmail conectado"}), 400
         stats = escanear_inbox(empresa_id=eid, max_correos=max_correos, service=service)
         _cache_invalidar(session["contador_id"])
         return jsonify({"ok": True, **stats})
+    except RefreshError:
+        logging.warning("Token Gmail revocado para empresa %s", eid)
+        try:
+            sb.table("gmail_tokens").update({"activo": False}).eq("empresa_id", eid).execute()
+            empresa = sb.table("empresas_clientes").select("razon_social").eq("id", eid).execute().data
+            nombre = empresa[0]["razon_social"] if empresa else f"empresa #{eid}"
+            cid = session.get("contador_id")
+            chat_id = _tg_chat_id_for_contador(cid)
+            _tg_send_raw(chat_id,
+                f"⚠️ *Token Gmail vencido*\n\n"
+                f"El acceso a Gmail de *{nombre}* expiró y debe renovarse.\n\n"
+                f"Entra a ContaBot → {nombre} → tab Gmail → *Reconectar Gmail*"
+            )
+        except Exception:
+            logging.exception("Error al manejar token revocado empresa %s", eid)
+        return jsonify({"ok": False, "error": "El token de Gmail venció. Reconecta Gmail desde el tab Gmail de esta empresa."}), 401
     except Exception:
         logging.exception("Error escaneando Gmail empresa %s", eid)
         return jsonify({"ok": False, "error": "Error interno"}), 500

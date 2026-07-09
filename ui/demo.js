@@ -1995,6 +1995,7 @@ async function escanearGmail(eid) {
       }
     } else {
       res_div.innerHTML = '<p style="color:var(--red)">' + esc(data.error) + '</p>';
+      if (res.status === 401) loadGmailEmpresa(eid);
     }
   } catch(e) {
     res_div.innerHTML = '<p style="color:var(--red)">Error al escanear</p>';
