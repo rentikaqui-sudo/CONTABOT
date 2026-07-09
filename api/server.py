@@ -2513,14 +2513,15 @@ def escanear_gmail_empresa(eid):
     err = validate_empresa_ownership(eid)
     if err: return err
     body = request.get_json() or {}
-    max_correos = min(int(body.get("max_correos", 50)), 200)
+    max_correos = min(int(body.get("max_correos", 50)), 2000)
+    after_date = body.get("after_date")  # formato YYYY/MM/DD
     try:
         from gmail_facturas import get_gmail_from_supabase, escanear_inbox
         from google.auth.exceptions import RefreshError
         service, _ = get_gmail_from_supabase(eid)
         if not service:
             return jsonify({"ok": False, "error": "Esta empresa no tiene Gmail conectado"}), 400
-        stats = escanear_inbox(empresa_id=eid, max_correos=max_correos, service=service)
+        stats = escanear_inbox(empresa_id=eid, max_correos=max_correos, service=service, after_date=after_date)
         _cache_invalidar(session["contador_id"])
         return jsonify({"ok": True, **stats})
     except RefreshError:

@@ -392,21 +392,35 @@ def escanear_todas_empresas(max_correos=50, sb=None):
         except Exception as e:
             logging.exception(f"[gmail] Error empresa {eid} ({email})")
 
-def escanear_inbox(empresa_id, max_correos=100, service=None):
+def escanear_inbox(empresa_id, max_correos=100, service=None, after_date=None):
+    """
+    Escanea el inbox buscando facturas no leídas.
+    after_date: string formato 'YYYY/MM/DD' para filtrar por fecha (ej. '2026/01/01')
+    Pagina automáticamente hasta alcanzar max_correos.
+    """
     if service is None:
         service = get_gmail()
 
-    # Query amplia — el filtro inteligente lo hace puntaje_es_factura()
     query = "has:attachment is:unread (filename:pdf OR filename:xml OR filename:zip)"
-    logging.info("Buscando en Gmail (máx %d correos)...", max_correos)
+    if after_date:
+        query += f" after:{after_date}"
+    logging.info("Buscando en Gmail (máx %d correos, query: %s)...", max_correos, query)
 
-    result = service.users().messages().list(
-        userId="me", q=query, maxResults=max_correos
-    ).execute()
+    # Recolectar IDs paginando (Gmail API devuelve máx 500 por página)
+    mensajes = []
+    page_token = None
+    while len(mensajes) < max_correos:
+        batch_size = min(500, max_correos - len(mensajes))
+        kwargs = {"userId": "me", "q": query, "maxResults": batch_size}
+        if page_token:
+            kwargs["pageToken"] = page_token
+        result = service.users().messages().list(**kwargs).execute()
+        mensajes.extend(result.get("messages", []))
+        page_token = result.get("nextPageToken")
+        if not page_token:
+            break
 
-    mensajes = result.get("messages", [])
     logging.info("Correos con adjuntos encontrados: %d", len(mensajes))
-
     stats = {"nuevas": 0, "duplicadas": 0, "ignoradas": 0, "errores": 0}
 
     for ref in mensajes:
