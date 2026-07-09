@@ -1950,6 +1950,8 @@ async function loadGmailEmpresa(eid) {
         (conectado ?
           '<div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem">' +
             '<button class="btn-demo" id="btn-scan-gmail" onclick="escanearGmail(' + eid + ')">Escanear bandeja ahora</button>' +
+            '<a href="/auth/gmail?empresa_id=' + eid + '" class="btn-demo" style="background:#f59e0b;color:#fff;display:inline-block">Reconectar Gmail</a>' +
+            '<button class="btn-demo" style="background:#6b7280;color:#fff" onclick="desconectarGmail(' + eid + ')">Desconectar</button>' +
             '<button class="btn-demo" style="background:var(--red);color:#fff" onclick="limpiarFacturasEmpresa(' + eid + ')">Limpiar facturas (testing)</button>' +
           '</div>' +
           '<div id="gmail-scan-resultado"></div>'
@@ -1999,6 +2001,22 @@ async function escanearGmail(eid) {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Escanear bandeja ahora';
+  }
+}
+
+async function desconectarGmail(eid) {
+  if (!confirm('¿Desconectar Gmail de esta empresa? Podrás volver a conectarlo después.')) return;
+  try {
+    const res = await fetch('/api/gmail/tokens/' + eid, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.ok) {
+      showToast('Gmail desconectado', 'info');
+      loadGmailEmpresa(eid);
+    } else {
+      showToast('Error al desconectar', 'error');
+    }
+  } catch(e) {
+    showToast('Error al desconectar', 'error');
   }
 }
 
