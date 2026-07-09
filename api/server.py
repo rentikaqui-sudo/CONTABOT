@@ -217,39 +217,53 @@ def health():
 
 @app.route("/api/cron/recordar-tokens-gmail")
 def cron_recordar_tokens_gmail():
-    """Llamado por cron-job.org cada 6 días. Recuerda a cada contador renovar tokens Gmail."""
+    """Llamado por cron-job.org diariamente. Avisa cuando un token tiene 6+ días (vence a los 7)."""
+    from datetime import datetime, timezone, timedelta
+    WARN_AFTER = timedelta(days=6)
     try:
         tokens = sb.table("gmail_tokens").select(
-            "empresa_id, email, activo, empresas_clientes(razon_social, nit, contador_id)"
+            "empresa_id, email, activo, token_created_at, reminder_sent_at, "
+            "empresas_clientes(razon_social, nit, contador_id)"
         ).eq("activo", True).execute().data
-        # Agrupar por contador
-        por_contador = {}
+
+        avisados = 0
         for t in tokens:
+            created_at = t.get("token_created_at")
+            if not created_at:
+                continue
+            age = datetime.now(timezone.utc) - datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            if age < WARN_AFTER:
+                continue
+            # No avisar dos veces por el mismo token
+            reminder_sent = t.get("reminder_sent_at")
+            if reminder_sent:
+                reminded_at = datetime.fromisoformat(reminder_sent.replace("Z", "+00:00"))
+                if reminded_at >= datetime.fromisoformat(created_at.replace("Z", "+00:00")):
+                    continue
             empresa = t.get("empresas_clientes") or {}
             cid = empresa.get("contador_id")
             if not cid:
                 continue
-            por_contador.setdefault(cid, []).append({
-                "razon_social": empresa.get("razon_social", ""),
-                "nit": empresa.get("nit", ""),
-                "email": t.get("email", ""),
-            })
-        # Enviar un mensaje por contador con todas sus empresas
-        for cid, empresas in por_contador.items():
             chat_id = _tg_chat_id_for_contador(cid)
             if not chat_id:
                 continue
-            lineas = "\n".join(
-                f"• *{e['razon_social']}* ({e['nit']}) — {e['email']}"
-                for e in empresas
-            )
+            nombre = empresa.get("razon_social", f"empresa #{t['empresa_id']}")
+            nit = empresa.get("nit", "")
+            dias = age.days
             _tg_send_raw(chat_id,
-                f"🔁 *Recordatorio: renueva tus tokens Gmail*\n\n"
-                f"Por favor entra a ContaBot y reconecta Gmail para cada empresa:\n\n"
-                f"{lineas}\n\n"
-                f"Ve a cada empresa → tab *Gmail* → botón *Reconectar Gmail*"
+                f"⚠️ *Token Gmail por vencer*\n\n"
+                f"*Empresa:* {nombre}\n"
+                f"*NIT:* {nit}\n"
+                f"*Gmail:* {t.get('email','')}\n"
+                f"*Antigüedad:* {dias} días (vence a los 7)\n\n"
+                f"Entra a ContaBot → selecciona *{nombre}* → tab *Gmail* → botón *Reconectar Gmail*"
             )
-        return jsonify({"ok": True, "contadores_avisados": len(por_contador)})
+            sb.table("gmail_tokens").update(
+                {"reminder_sent_at": datetime.now(timezone.utc).isoformat()}
+            ).eq("empresa_id", t["empresa_id"]).execute()
+            avisados += 1
+
+        return jsonify({"ok": True, "avisados": avisados, "revisados": len(tokens)})
     except Exception:
         logging.exception("Error en cron recordar-tokens-gmail")
         return jsonify({"ok": False, "error": "Error interno"}), 500
