@@ -214,6 +214,84 @@ def health():
     except Exception:
         return jsonify({"status": "ok", "db": "unreachable"}), 200
 
+
+@app.route("/api/cron/recordar-tokens-gmail")
+def cron_recordar_tokens_gmail():
+    """Llamado por cron-job.org cada 6 días. Recuerda a cada contador renovar tokens Gmail."""
+    try:
+        tokens = sb.table("gmail_tokens").select(
+            "empresa_id, email, activo, empresas_clientes(razon_social, nit, contador_id)"
+        ).eq("activo", True).execute().data
+        # Agrupar por contador
+        por_contador = {}
+        for t in tokens:
+            empresa = t.get("empresas_clientes") or {}
+            cid = empresa.get("contador_id")
+            if not cid:
+                continue
+            por_contador.setdefault(cid, []).append({
+                "razon_social": empresa.get("razon_social", ""),
+                "nit": empresa.get("nit", ""),
+                "email": t.get("email", ""),
+            })
+        # Enviar un mensaje por contador con todas sus empresas
+        for cid, empresas in por_contador.items():
+            chat_id = _tg_chat_id_for_contador(cid)
+            if not chat_id:
+                continue
+            lineas = "\n".join(
+                f"• *{e['razon_social']}* ({e['nit']}) — {e['email']}"
+                for e in empresas
+            )
+            _tg_send_raw(chat_id,
+                f"🔁 *Recordatorio: renueva tus tokens Gmail*\n\n"
+                f"Por favor entra a ContaBot y reconecta Gmail para cada empresa:\n\n"
+                f"{lineas}\n\n"
+                f"Ve a cada empresa → tab *Gmail* → botón *Reconectar Gmail*"
+            )
+        return jsonify({"ok": True, "contadores_avisados": len(por_contador)})
+    except Exception:
+        logging.exception("Error en cron recordar-tokens-gmail")
+        return jsonify({"ok": False, "error": "Error interno"}), 500
+
+
+@app.route("/api/cron/chequear-tokens-gmail")
+def cron_chequear_tokens_gmail():
+    """Llamado por cron-job.org cada semana. Detecta tokens vencidos y avisa por Telegram."""
+    secret = os.environ.get("CRON_SECRET", "")
+    if secret and request.args.get("secret") != secret:
+        return jsonify({"ok": False}), 401
+    try:
+        from gmail_facturas import get_gmail_from_supabase
+        from google.auth.exceptions import RefreshError
+        tokens = sb.table("gmail_tokens").select("empresa_id, email, activo").eq("activo", True).execute().data
+        vencidos = []
+        for t in tokens:
+            eid = t["empresa_id"]
+            try:
+                get_gmail_from_supabase(eid)
+            except RefreshError:
+                sb.table("gmail_tokens").update({"activo": False}).eq("empresa_id", eid).execute()
+                empresa = sb.table("empresas_clientes").select("razon_social, nit, contador_id").eq("id", eid).execute().data
+                if not empresa:
+                    continue
+                e = empresa[0]
+                vencidos.append(e)
+                chat_id = _tg_chat_id_for_contador(e["contador_id"])
+                _tg_send_raw(chat_id,
+                    f"⚠️ *Token Gmail vencido*\n\n"
+                    f"*Empresa:* {e['razon_social']}\n"
+                    f"*NIT:* {e.get('nit','')}\n"
+                    f"*Gmail:* {t.get('email','')}\n\n"
+                    f"Entra a ContaBot → selecciona *{e['razon_social']}* → tab *Gmail* → botón *Reconectar Gmail*"
+                )
+            except Exception:
+                pass
+        return jsonify({"ok": True, "revisados": len(tokens), "vencidos": len(vencidos)})
+    except Exception:
+        logging.exception("Error en cron chequear-tokens-gmail")
+        return jsonify({"ok": False, "error": "Error interno"}), 500
+
 @app.route("/")
 def index():
     if not session.get("contador_id"):
