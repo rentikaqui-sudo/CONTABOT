@@ -225,7 +225,7 @@ async function loadInicio() {
       <style>.empresa-card:nth-child(${i+1})::before{background:${e.color}}</style>
       <div class="empresa-card-top">
         <div class="empresa-info-header">
-          <span class="empresa-icono">${esc(e.icono)}</span>
+          <span class="empresa-icono">${esc(e.icono || '🏢')}</span>
           <div>
             <div class="empresa-nombre">${esc(e.razon_social)}</div>
             <div class="empresa-sector">${esc(e.sector)}</div>
@@ -293,7 +293,7 @@ async function abrirEmpresa(empresa) {
   const dash = await fetch(`/api/empresa/${empresa.id}/dashboard`).then(r => r.json());
   document.getElementById('empresa-detail-header').innerHTML = `
     <button class="btn-volver" onclick="volverAClientes()">← Mis Clientes</button>
-    <span style="font-size:32px">${empresa.icono}</span>
+    <span style="font-size:32px">${empresa.icono || '🏢'}</span>
     <div>
       <div style="font-size:17px;font-weight:700">${empresa.razon_social}</div>
       <div style="font-size:12px;color:var(--muted)">${empresa.sector} · NIT ${empresa.nit} · ${empresa.ciudad} · ${empresa.regimen || 'Jurídica'}</div>
@@ -1794,7 +1794,7 @@ function renderArchivos() {
     return `
     <details class="arch-empresa-card" open>
       <summary class="arch-empresa-header" style="border-left:4px solid ${emp.color}">
-        <span class="arch-icono">${emp.icono}</span>
+        <span class="arch-icono">${emp.icono || '🏢'}</span>
         <div>
           <div class="arch-empresa-nombre">${emp.razon_social}</div>
           <div class="arch-empresa-nit muted">NIT ${emp.nit}</div>
@@ -1986,22 +1986,27 @@ async function escanearGmail(eid) {
     });
     const data = await res.json();
     if (data.ok) {
-      res_div.innerHTML =
-        '<div class="kpi-card green" style="max-width:400px">' +
-          '<div class="kpi-label">Resultado del escaneo</div>' +
-          '<div style="margin-top:.5rem;display:grid;grid-template-columns:1fr 1fr;gap:.5rem">' +
-            '<div><b style="color:var(--green)">' + (data.nuevas ?? 0) + '</b> <span class="muted">nuevas</span></div>' +
-            '<div><b style="color:var(--muted)">' + (data.duplicadas ?? 0) + '</b> <span class="muted">duplicadas</span></div>' +
-            '<div><b style="color:var(--yellow)">' + (data.ignoradas ?? 0) + '</b> <span class="muted">ignoradas</span></div>' +
-            '<div><b style="color:var(--red)">' + (data.errores ?? 0) + '</b> <span class="muted">errores</span></div>' +
-          '</div>' +
-        '</div>';
-      if ((data.nuevas ?? 0) > 0) {
-        showToast(data.nuevas + ' factura(s) registradas', 'success');
-        ventasEmpresaData = {};
-        gastosEmpresaData = {};
+      if (data.background) {
+        res_div.innerHTML = '<div class="kpi-card" style="max-width:400px;background:#eff6ff;border:1px solid #bfdbfe"><div class="kpi-label">Escaneo en progreso</div><div style="margin-top:.5rem;font-size:14px;color:#1e40af">' + esc(data.mensaje) + '</div></div>';
+        showToast('Escaneo iniciado — recibirás resultado por Telegram', 'info');
       } else {
-        showToast('Escaneo completado — sin facturas nuevas', 'info');
+        res_div.innerHTML =
+          '<div class="kpi-card green" style="max-width:400px">' +
+            '<div class="kpi-label">Resultado del escaneo</div>' +
+            '<div style="margin-top:.5rem;display:grid;grid-template-columns:1fr 1fr;gap:.5rem">' +
+              '<div><b style="color:var(--green)">' + (data.nuevas ?? 0) + '</b> <span class="muted">nuevas</span></div>' +
+              '<div><b style="color:var(--muted)">' + (data.duplicadas ?? 0) + '</b> <span class="muted">duplicadas</span></div>' +
+              '<div><b style="color:var(--yellow)">' + (data.ignoradas ?? 0) + '</b> <span class="muted">ignoradas</span></div>' +
+              '<div><b style="color:var(--red)">' + (data.errores ?? 0) + '</b> <span class="muted">errores</span></div>' +
+            '</div>' +
+          '</div>';
+        if ((data.nuevas ?? 0) > 0) {
+          showToast(data.nuevas + ' factura(s) registradas', 'success');
+          ventasEmpresaData = {};
+          gastosEmpresaData = {};
+        } else {
+          showToast('Escaneo completado — sin facturas nuevas', 'info');
+        }
       }
     } else {
       res_div.innerHTML = '<p style="color:var(--red)">' + esc(data.error) + '</p>';

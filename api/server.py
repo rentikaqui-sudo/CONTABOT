@@ -4,7 +4,7 @@ Cada contador se registra con email/password y solo ve sus propias empresas.
 Data layer: Supabase (service_role key)
 """
 
-import os, json, functools, re, sys, logging, time, secrets
+import os, json, functools, re, sys, logging, time, secrets, threading
 from datetime import date, timedelta, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
@@ -2613,6 +2613,25 @@ def escanear_gmail_empresa(eid):
         service, _ = get_gmail_from_supabase(eid)
         if not service:
             return jsonify({"ok": False, "error": "Esta empresa no tiene Gmail conectado"}), 400
+        # Escaneos grandes corren en background para evitar timeout de Railway
+        if max_correos > 100:
+            cid = session["contador_id"]
+            def _bg():
+                try:
+                    stats = escanear_inbox(empresa_id=eid, max_correos=max_correos, service=service, after_date=after_date)
+                    _cache_invalidar(cid)
+                    chat_id = _tg_chat_id_for_contador(cid)
+                    _tg_send_raw(chat_id,
+                        f"✅ *Escaneo Gmail completado*\n\n"
+                        f"Empresa #{eid}\n"
+                        f"Nuevas: {stats.get('nuevas',0)} | Duplicadas: {stats.get('duplicadas',0)} | "
+                        f"Ignoradas: {stats.get('ignoradas',0)} | Errores: {stats.get('errores',0)}"
+                    )
+                except Exception:
+                    logging.exception("Error en escaneo background empresa %s", eid)
+            threading.Thread(target=_bg, daemon=True).start()
+            return jsonify({"ok": True, "background": True,
+                "mensaje": f"Escaneando {max_correos} correos en segundo plano. Te avisamos por Telegram cuando termine."})
         stats = escanear_inbox(empresa_id=eid, max_correos=max_correos, service=service, after_date=after_date)
         _cache_invalidar(session["contador_id"])
         return jsonify({"ok": True, **stats})
