@@ -373,28 +373,44 @@ function renderVentas(data) {
   document.getElementById('badge-ventas-e').textContent = (data ? data.length : 0) + ' en página';
   const tbody = document.getElementById('tbody-ventas-e');
   tbody.innerHTML = '';
+  let netoTotal = 0;
   data.forEach((f, i) => {
+    const esNC  = f.tipo_documento === 'nota_credito';
+    const signo = esNC ? -1 : 1;
+    const neto  = signo * (f.valor_neto || 0);
+    netoTotal  += neto;
     const tr = document.createElement('tr');
     tr.id = `row-v-${f.numero.replace(/[^a-zA-Z0-9]/g,'_')}`;
     tr.style.animationDelay = `${i * 0.03}s`;
+    if (esNC) tr.style.background = 'rgba(239,68,68,.04)';
     const refLabel = f.referencia_nc ? `<span class="muted" style="font-size:10px"> → ${esc(f.referencia_nc)}</span>` : '';
+    const netoColor = esNC ? 'var(--red)' : 'var(--green)';
+    const netoLabel = esNC ? `(${COP(f.valor_neto)})` : COP(f.valor_neto);
     tr.innerHTML = `
       <td><b>${esc(f.numero)}</b>${tipoBadge(f.tipo_documento)}${refLabel}</td>
       <td class="muted">${esc(f.fecha)}</td>
       <td>${esc(f.cliente_nombre)}</td>
       <td class="muted">${esc(f.cliente_ciudad)}</td>
-      <td>${COP(f.subtotal)}</td>
-      <td style="color:var(--yellow)">${COP(f.iva)}</td>
+      <td>${esNC ? `(${COP(f.subtotal)})` : COP(f.subtotal)}</td>
+      <td style="color:var(--yellow)">${esNC ? `(${COP(f.iva)})` : COP(f.iva)}</td>
       <td style="color:var(--red)">(${COP(f.retefuente)})</td>
       <td style="color:var(--red)">(${COP(f.reteiva)})</td>
       <td style="color:var(--red)">(${COP(f.reteica)})</td>
-      <td><b>${COP(f.total_factura)}</b></td>
-      <td style="color:var(--green)"><b>${COP(f.valor_neto)}</b></td>
+      <td><b>${esNC ? `(${COP(f.total_factura)})` : COP(f.total_factura)}</b></td>
+      <td style="color:${netoColor}"><b>${netoLabel}</b></td>
       <td>${estadoBadge(f.estado)}</td>
       <td>${accionBtn(f.estado, 'venta', f.numero)}</td>
     `;
     tbody.appendChild(tr);
   });
+  // Fila de total neto de la página
+  if (data.length > 1) {
+    const trTotal = document.createElement('tr');
+    trTotal.style.cssText = 'border-top:2px solid var(--border);font-weight:700;background:var(--bg2)';
+    const color = netoTotal >= 0 ? 'var(--green)' : 'var(--red)';
+    trTotal.innerHTML = `<td colspan="10" style="text-align:right;color:var(--muted);font-size:12px">Neto página</td><td style="color:${color}">${netoTotal < 0 ? '(' + COP(-netoTotal) + ')' : COP(netoTotal)}</td><td colspan="2"></td>`;
+    tbody.appendChild(trTotal);
+  }
 }
 
 // ── Flujo A: Procesamiento animado ────────────────────────────────────────────
