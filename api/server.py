@@ -2056,16 +2056,21 @@ def importar_dian_registrar(eid):
             return float(str(v).replace(".", "").replace(",", ".").replace("$", "").strip())
         except: return 0.0
 
-    insertadas = 0
-    errores    = 0
+    insertadas  = 0
+    con_aviso   = 0
     for f in facturas:
+        cufe = (f.get("cufe") or "").lower().strip()
+        if not cufe or cufe in registradas_antes:
+            continue
+        numero = (f.get("numero") or "").strip() or cufe[:24]
+        total  = _safe_float(f.get("total"))
+        # Intentar normalizar fecha; si falla usar hoy y marcar para revisión
+        fecha_raw = f.get("fecha")
+        fecha = _normalizar_fecha(fecha_raw)
+        necesita_revision = not fecha
+        if not fecha:
+            fecha = dt.today().strftime("%Y-%m-%d")
         try:
-            cufe = (f.get("cufe") or "").lower().strip()
-            if not cufe or cufe in registradas_antes:
-                continue
-            numero = (f.get("numero") or "").strip() or cufe[:24]
-            fecha  = _normalizar_fecha(f.get("fecha")) or dt.today().strftime("%Y-%m-%d")
-            total  = _safe_float(f.get("total"))
             _insertar_factura_gasto(eid, {
                 "numero":           numero,
                 "cufe":             cufe,
@@ -2073,6 +2078,7 @@ def importar_dian_registrar(eid):
                 "proveedor_nit":    (f.get("nit_emisor") or "").strip(),
                 "proveedor_nombre": (f.get("nombre_emisor") or "").strip(),
                 "proveedor_ciudad": "",
+                "categoria":        "⚠️ REVISAR" if necesita_revision else "",
                 "subtotal":         total,
                 "iva":              0,
                 "total_factura":    total,
@@ -2080,11 +2086,31 @@ def importar_dian_registrar(eid):
             }, fuente="dian")
             registradas_antes.add(cufe)
             insertadas += 1
+            if necesita_revision:
+                con_aviso += 1
         except Exception:
-            logging.exception("Error insertando factura DIAN cufe=%s", f.get("cufe", "?"))
-            errores += 1
+            # Último intento: guardar con datos mínimos seguros y marcar para revisión
+            try:
+                _insertar_factura_gasto(eid, {
+                    "numero":           cufe[:24],
+                    "cufe":             cufe,
+                    "fecha":            dt.today().strftime("%Y-%m-%d"),
+                    "proveedor_nit":    "",
+                    "proveedor_nombre": (f.get("nombre_emisor") or "Sin nombre").strip(),
+                    "proveedor_ciudad": "",
+                    "categoria":        "⚠️ REVISAR",
+                    "subtotal":         total,
+                    "iva":              0,
+                    "total_factura":    total,
+                    "valor_neto":       total,
+                }, fuente="dian")
+                registradas_antes.add(cufe)
+                insertadas += 1
+                con_aviso  += 1
+            except Exception:
+                logging.exception("Error crítico insertando factura DIAN cufe=%s", cufe)
 
-    return jsonify({"ok": True, "insertadas": insertadas, "errores": errores})
+    return jsonify({"ok": True, "insertadas": insertadas, "con_aviso": con_aviso})
 
 
 # ── Marcar factura como pagada ─────────────────────────────────────────────────

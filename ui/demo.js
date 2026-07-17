@@ -1495,8 +1495,8 @@ async function dianRegistrarTodas() {
       btn.textContent = `✓ ${data.insertadas} factura${data.insertadas !== 1 ? 's' : ''} registrada${data.insertadas !== 1 ? 's' : ''}`;
       btn.style.background = 'var(--green)';
       window._dianPendientes = [];
-      const extraNota = data.errores > 0
-        ? ` Además, <strong>${data.errores} factura${data.errores !== 1 ? 's' : ''} quedaron pendientes de revisión manual</strong> — revísalas en la tabla de gastos.`
+      const extraNota = data.con_aviso > 0
+        ? ` Además, <strong>${data.con_aviso} factura${data.con_aviso !== 1 ? 's' : ''} quedaron marcadas como "⚠️ REVISAR"</strong> en la tabla de gastos — algunos datos del Excel no eran confiables.`
         : '';
       const aviso = document.createElement('p');
       aviso.style.cssText = 'margin-top:.75rem;padding:.6rem .9rem;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);border-radius:8px;color:#fbbf24;font-size:12px;line-height:1.5';
