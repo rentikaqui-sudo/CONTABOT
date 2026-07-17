@@ -2078,6 +2078,25 @@ def marcar_pagada(tipo, numero, eid):
         return jsonify({"ok": False, "error": "Error interno"}), 400
 
 
+# ── Revertir estado PAGADA → PENDIENTE ────────────────────────────────────────
+
+@app.route("/api/factura/<tipo>/<path:numero>/empresa/<int:eid>/despagar", methods=["POST"])
+@login_required
+def desmarcar_pagada(tipo, numero, eid):
+    err = validate_empresa_ownership(eid)
+    if err: return err
+    if tipo not in ("venta", "gasto"):
+        return jsonify({"ok": False, "error": "Tipo inválido"}), 400
+    tabla = "facturas_venta" if tipo == "venta" else "facturas_gastos"
+    try:
+        sb.table(tabla).update({"estado": "PENDIENTE"}).eq("numero", numero).eq("empresa_id", eid).execute()
+        _cache_invalidar(session["contador_id"])
+        return jsonify({"ok": True})
+    except Exception as ex:
+        logging.exception('Error en endpoint')
+        return jsonify({"ok": False, "error": "Error interno"}), 400
+
+
 # ── Borrar factura ────────────────────────────────────────────────────────────
 
 @app.route("/api/factura/<tipo>/<path:numero>/empresa/<int:eid>", methods=["DELETE"])

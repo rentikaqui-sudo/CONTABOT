@@ -223,8 +223,35 @@ def extraer_xml(path: str) -> dict | None:
         subtotal = _find_max(root, "LineExtensionAmount")
         total    = _find_max(root, "PayableAmount")
 
-    # IVA: máximo TaxAmount (el valor total del impuesto, más alto que subtotales por línea)
-    iva = _find_max(root, "TaxAmount")
+    # IVA y retenciones desde TaxTotal / WithholdingTaxTotal
+    # TaxScheme/ID DIAN: 01=IVA, 04=INC, 06=Retefuente, 05=ReteIVA, 07=ReteICA
+    iva = 0.0
+    retefuente = 0.0
+    reteiva    = 0.0
+    reteica    = 0.0
+    for section_tag in ("TaxTotal", "WithholdingTaxTotal"):
+        for section in root.findall(f".//{section_tag}"):
+            ta = section.find(".//TaxAmount")
+            if ta is None:
+                continue
+            amount = to_float(ta.text)
+            sid, sname = "", ""
+            sch = section.find(".//TaxScheme")
+            if sch is not None:
+                el = sch.find("ID");   sid   = (el.text or "").strip().upper() if el is not None else ""
+                el = sch.find("Name"); sname = (el.text or "").upper()         if el is not None else ""
+            if sid == "06" or "RETEFU" in sname:
+                retefuente += amount
+            elif sid == "05" or "RETEIVA" in sname:
+                reteiva += amount
+            elif sid == "07" or "RETEICA" in sname:
+                reteica += amount
+            elif sid in ("01", "04") or "IVA" in sname or "INC" in sname or sid == "":
+                if section_tag == "TaxTotal":
+                    iva += amount
+    # Fallback: si no se detectó IVA por esquema, usar el máximo TaxAmount
+    if iva == 0.0:
+        iva = _find_max(root, "TaxAmount")
 
     # Código DIAN del tipo de documento (01 factura, 03 doc equivalente, 91 NC, 92 ND, etc.)
     tipo_dian = (
@@ -252,6 +279,9 @@ def extraer_xml(path: str) -> dict | None:
         "receptor_nombre":   rec_nombre,
         "subtotal":          subtotal,
         "iva":               iva,
+        "retefuente":        retefuente,
+        "reteiva":           reteiva,
+        "reteica":           reteica,
         "total_factura":     total,
         "tipo_documento":    tipo_documento,
         "tipo_dian":         tipo_dian,
@@ -317,6 +347,9 @@ def guardar_factura(datos: dict, empresa_id: int, empresa_nit: str,
         "fecha":          datos.get("fecha") or str(_date.today()),
         "subtotal":       float(datos.get("subtotal") or 0),
         "iva":            float(datos.get("iva") or 0),
+        "retefuente":     float(datos.get("retefuente") or 0),
+        "reteiva":        float(datos.get("reteiva") or 0),
+        "reteica":        float(datos.get("reteica") or 0),
         "total_factura":  float(datos.get("total_factura") or 0),
         "valor_neto":     float(datos.get("valor_neto") or datos.get("total_factura") or 0),
         "estado":         estado,

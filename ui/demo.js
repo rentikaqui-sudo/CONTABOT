@@ -747,7 +747,7 @@ function tipoBadge(tipo) {
 
 function accionBtn(estado, tabla, numero) {
   const e = (estado || '').toUpperCase();
-  if (e.includes('PAGADA'))       return '';
+  if (e.includes('PAGADA'))       return `<button class="btn-pagar btn-revertir" onclick="desmarcarPagada('${tabla}','${esc(numero)}',this)">↩ Revertir</button>`;
   if (e.includes('POR_DEVOLVER')) return `<button class="btn-pagar btn-devolver" onclick="marcarPagada('${tabla}','${esc(numero)}',this)">✓ Devuelta</button>`;
   if (e.includes('POR_RECIBIR'))  return `<button class="btn-pagar btn-recibir"  onclick="marcarPagada('${tabla}','${esc(numero)}',this)">✓ Recibida</button>`;
   return `<button class="btn-pagar" onclick="marcarPagada('${tabla}','${esc(numero)}',this)">✓ Pagada</button>`;
@@ -1436,7 +1436,8 @@ async function dianProcesar(file) {
     area.style.display = 'none';
     res_box.style.display = 'block';
 
-    const _dianNuevas = data.detalle_nuevas || [];
+    window._dianPendientes = data.detalle_nuevas || [];
+    const _dianNuevas = window._dianPendientes;
     const nuevasRows = _dianNuevas.map(f => `<tr>
       <td>${f.numero || '—'}</td>
       <td>${f.fecha || '—'}</td>
@@ -1494,6 +1495,10 @@ async function dianRegistrarTodas() {
       btn.textContent = `✓ ${data.insertadas} factura${data.insertadas !== 1 ? 's' : ''} registrada${data.insertadas !== 1 ? 's' : ''}`;
       btn.style.background = 'var(--green)';
       window._dianPendientes = [];
+      const aviso = document.createElement('p');
+      aviso.style.cssText = 'margin-top:.75rem;padding:.6rem .9rem;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);border-radius:8px;color:#fbbf24;font-size:12px;line-height:1.5';
+      aviso.innerHTML = '⚠️ <strong>IVA, Retefuente y ReteICA quedaron en $0</strong> para estas facturas — el Excel DIAN no incluye ese desglose. Para capturarlas correctamente, pídele el ZIP al proveedor y súbelo por Gmail o manualmente.';
+      btn.parentNode.insertBefore(aviso, btn.nextSibling);
     } else {
       btn.textContent = 'Error — reintentar';
       btn.disabled = false;
@@ -1637,15 +1642,36 @@ async function marcarPagada(tipo, numero, btn) {
   const res = await fetch(`/api/factura/${tipo}/${encodeURIComponent(numero)}/empresa/${empresaActual.id}/pagar`, { method: 'POST' });
   const data = await res.json();
   if (data.ok) {
-    btn.textContent = '✓';
-    btn.style.background = '#059669';
     const td = btn.closest('tr').querySelector('td:nth-child(12)');
     if (td) td.innerHTML = estadoBadge('PAGADA');
-    // Limpiar caché para que recargue datos actualizados
+    btn.textContent = '↩ Revertir';
+    btn.className = 'btn-pagar btn-revertir';
+    btn.disabled = false;
+    btn.onclick = function() { desmarcarPagada(tipo, numero, this); };
     delete ventasEmpresaData[empresaActual.id];
   } else {
     btn.disabled = false;
     btn.textContent = '✓ Pagada';
+  }
+}
+
+async function desmarcarPagada(tipo, numero, btn) {
+  if (!empresaActual) return;
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  const res = await fetch(`/api/factura/${tipo}/${encodeURIComponent(numero)}/empresa/${empresaActual.id}/despagar`, { method: 'POST' });
+  const data = await res.json();
+  if (data.ok) {
+    const td = btn.closest('tr').querySelector('td:nth-child(12)');
+    if (td) td.innerHTML = estadoBadge('PENDIENTE');
+    btn.textContent = '✓ Pagada';
+    btn.className = 'btn-pagar';
+    btn.disabled = false;
+    btn.onclick = function() { marcarPagada(tipo, numero, this); };
+    delete ventasEmpresaData[empresaActual.id];
+  } else {
+    btn.disabled = false;
+    btn.textContent = '↩ Revertir';
   }
 }
 
