@@ -1928,6 +1928,22 @@ def informe_excel(eid):
     return resp
 
 
+def _normalizar_fecha(val) -> str:
+    """Convierte cualquier valor de fecha a YYYY-MM-DD para Supabase."""
+    import re as _re2
+    from datetime import datetime as _dt
+    if val is None:
+        return ""
+    if hasattr(val, 'strftime'):
+        return val.strftime("%Y-%m-%d")
+    s = str(val).strip()[:10]
+    # DD-MM-YYYY o DD/MM/YYYY → YYYY-MM-DD
+    m = _re2.match(r'^(\d{2})[-/](\d{2})[-/](\d{4})$', s)
+    if m:
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    return s
+
+
 # ── Importar Excel DIAN — conciliación ────────────────────────────────────────
 
 @app.route("/api/empresa/<int:eid>/importar-dian", methods=["POST"])
@@ -1987,10 +2003,10 @@ def importar_dian(eid):
                     cufes_dian[val.lower()] = {
                         "cufe":         val.lower(),
                         "numero":       str(row[num_col] or "") if num_col is not None else "",
-                        "fecha":        str(row[fecha_col] or "")[:10] if fecha_col is not None else "",
+                        "fecha":        _normalizar_fecha(row[fecha_col]) if fecha_col is not None else "",
                         "nit_emisor":   str(row[nit_col] or "") if nit_col is not None else "",
                         "nombre_emisor":str(row[nombre_col] or "") if nombre_col is not None else "",
-                        "total":        float(row[total_col] or 0) if total_col is not None else 0,
+                        "total":        (lambda v: float(v) if isinstance(v,(int,float)) else 0.0)(row[total_col]) if total_col is not None else 0,
                     }
 
     if not cufes_dian:
@@ -2033,29 +2049,42 @@ def importar_dian_registrar(eid):
         for r in sb.table("facturas_gastos").select("cufe").eq("empresa_id", eid).execute().data
     }
 
-    insertadas = 0
-    for f in facturas:
-        cufe = (f.get("cufe") or "").lower()
-        if not cufe or cufe in registradas_antes:
-            continue
-        numero = f.get("numero") or cufe[:12]
-        fecha  = (f.get("fecha") or dt.today().strftime("%Y-%m-%d"))[:10]
-        _insertar_factura_gasto(eid, {
-            "numero":           numero,
-            "cufe":             cufe,
-            "fecha":            fecha,
-            "proveedor_nit":    f.get("nit_emisor", ""),
-            "proveedor_nombre": f.get("nombre_emisor", ""),
-            "proveedor_ciudad": "",
-            "subtotal":         float(f.get("total") or 0),
-            "iva":              0,
-            "total_factura":    float(f.get("total") or 0),
-            "valor_neto":       float(f.get("total") or 0),
-        }, fuente="dian")
-        registradas_antes.add(cufe)
-        insertadas += 1
+    def _safe_float(v):
+        try:
+            if v is None: return 0.0
+            if isinstance(v, (int, float)): return float(v)
+            return float(str(v).replace(".", "").replace(",", ".").replace("$", "").strip())
+        except: return 0.0
 
-    return jsonify({"ok": True, "insertadas": insertadas})
+    insertadas = 0
+    errores    = 0
+    for f in facturas:
+        try:
+            cufe = (f.get("cufe") or "").lower().strip()
+            if not cufe or cufe in registradas_antes:
+                continue
+            numero = (f.get("numero") or "").strip() or cufe[:24]
+            fecha  = _normalizar_fecha(f.get("fecha")) or dt.today().strftime("%Y-%m-%d")
+            total  = _safe_float(f.get("total"))
+            _insertar_factura_gasto(eid, {
+                "numero":           numero,
+                "cufe":             cufe,
+                "fecha":            fecha,
+                "proveedor_nit":    (f.get("nit_emisor") or "").strip(),
+                "proveedor_nombre": (f.get("nombre_emisor") or "").strip(),
+                "proveedor_ciudad": "",
+                "subtotal":         total,
+                "iva":              0,
+                "total_factura":    total,
+                "valor_neto":       total,
+            }, fuente="dian")
+            registradas_antes.add(cufe)
+            insertadas += 1
+        except Exception:
+            logging.exception("Error insertando factura DIAN cufe=%s", f.get("cufe", "?"))
+            errores += 1
+
+    return jsonify({"ok": True, "insertadas": insertadas, "errores": errores})
 
 
 # ── Marcar factura como pagada ─────────────────────────────────────────────────
