@@ -1495,9 +1495,12 @@ async function dianRegistrarTodas() {
       btn.textContent = `✓ ${data.insertadas} factura${data.insertadas !== 1 ? 's' : ''} registrada${data.insertadas !== 1 ? 's' : ''}`;
       btn.style.background = 'var(--green)';
       window._dianPendientes = [];
+      const extraNota = data.errores > 0
+        ? ` Además, <strong>${data.errores} factura${data.errores !== 1 ? 's' : ''} quedaron pendientes de revisión manual</strong> — revísalas en la tabla de gastos.`
+        : '';
       const aviso = document.createElement('p');
       aviso.style.cssText = 'margin-top:.75rem;padding:.6rem .9rem;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);border-radius:8px;color:#fbbf24;font-size:12px;line-height:1.5';
-      aviso.innerHTML = '⚠️ <strong>IVA, Retefuente y ReteICA quedaron en $0</strong> para estas facturas — el Excel DIAN no incluye ese desglose. Para capturarlas correctamente, pídele el ZIP al proveedor y súbelo por Gmail o manualmente.';
+      aviso.innerHTML = `⚠️ <strong>IVA, Retefuente y ReteICA quedaron en $0</strong> para estas facturas — el Excel DIAN no incluye ese desglose. Para capturarlas correctamente, pídele el ZIP al proveedor y súbelo por Gmail o manualmente.${extraNota}`;
       btn.parentNode.insertBefore(aviso, btn.nextSibling);
     } else {
       btn.textContent = 'Error — reintentar';
